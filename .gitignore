@@ -10,6 +10,7 @@
 # Precompiled Headers
 *.gch
 *.pch
+*.dll
 
 # Compiled Dynamic libraries
 *.so
@@ -23,6 +24,7 @@
 *.lai
 *.la
 *.a
+*.lib
 
 # Executables
 *.exe
@@ -31,3 +33,5 @@
 
 *.vs
 *x64
+!GameServer_Final_term/gs_fianl_Server/include/
+!GameServer_Final_term/gs_fianl_Server/*.dll
