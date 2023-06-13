@@ -220,7 +220,7 @@ void WakeUpNPC(int npc_id, int waker)
 
 void process_packet(int c_id, char* packet)
 {
-	switch (packet[1]) {
+	switch (packet[2]) {
 	case CS_LOGIN: {
 		CS_LOGIN_PACKET* p = reinterpret_cast<CS_LOGIN_PACKET*>(packet);
 		strcpy_s(clients[c_id]._name, p->name);
@@ -258,7 +258,7 @@ void process_packet(int c_id, char* packet)
 		}
 		clients[c_id].x = x;
 		clients[c_id].y = y;
-
+		cout << p->direction << " : " << clients[c_id].x << " : " << clients[c_id].y << endl;
 		unordered_set<int> near_list;
 		clients[c_id]._vl.lock();
 		unordered_set<int> old_vlist = clients[c_id]._view_list;
@@ -291,15 +291,17 @@ void process_packet(int c_id, char* packet)
 				clients[c_id].send_add_player_packet(pl);
 		}
 
-		for (auto& pl : old_vlist)
+		for (auto& pl : old_vlist) {
 			if (0 == near_list.count(pl)) {
 				clients[c_id].send_remove_player_packet(pl);
 				if (is_pc(pl))
 					clients[pl].send_remove_player_packet(c_id);
 			}
+		}
 	}
-				break;
+		break;
 	}
+	printf("Unknown PACKET type [%d]\n", packet[2]);
 }
 
 void disconnect(int c_id)
@@ -433,7 +435,7 @@ void worker_thread(HANDLE h_iocp)
 			int remain_data = num_bytes + clients[key]._prev_remain;
 			char* p = ex_over->_send_buf;
 			while (remain_data > 0) {
-				int packet_size = *reinterpret_cast<short*>(p);
+				int packet_size = *reinterpret_cast<unsigned short*>(p);
 				cout << "packet_size : " << packet_size << endl;
 				if (packet_size <= remain_data) {
 					process_packet(static_cast<int>(key), p);

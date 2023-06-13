@@ -37,7 +37,7 @@ struct CS_MOVE_PACKET {
 	unsigned short size;
 	char	type;
 	char	direction;  // 0 : UP, 1 : DOWN, 2 : LEFT, 3 : RIGHT
-	unsigned	move_time;
+	unsigned int move_time;
 };
 
 struct CS_CHAT_PACKET {

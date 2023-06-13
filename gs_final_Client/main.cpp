@@ -222,7 +222,7 @@ void ProcessPacket(char* ptr)
 		break;
 	}
 	default:
-		printf("Unknown PACKET type [%d]\n", ptr[1]);
+		printf("Unknown PACKET type [%d]\n", ptr[2]);
 	}
 }
 
@@ -267,8 +267,11 @@ void client_main()
 		wcout << L"Disconnected\n";
 		exit(-1);
 	}
-	if (recv_result != sf::Socket::NotReady)
+	if (recv_result != sf::Socket::NotReady) 
 		if (received > 0) process_data(net_buf, received);
+	
+		
+		
 
 	for (int i = 0; i < SCREEN_WIDTH; ++i)
 		for (int j = 0; j < SCREEN_HEIGHT; ++j)
