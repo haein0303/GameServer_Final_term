@@ -18,7 +18,7 @@ sf::TcpSocket s_socket;
 constexpr auto SCREEN_WIDTH = 16;
 constexpr auto SCREEN_HEIGHT = 16;
 
-constexpr auto TILE_WIDTH = 65;
+constexpr auto TILE_WIDTH = 48;
 constexpr auto WINDOW_WIDTH = SCREEN_WIDTH * TILE_WIDTH;   // size of window
 constexpr auto WINDOW_HEIGHT = SCREEN_WIDTH * TILE_WIDTH;
 
@@ -30,7 +30,7 @@ sf::RenderWindow* g_window;
 sf::Font g_font;
 
 class OBJECT {
-private:
+protected:
 	bool m_showing;
 	sf::Sprite m_sprite;
 
@@ -50,6 +50,9 @@ public:
 	}
 	OBJECT() {
 		m_showing = false;
+	}
+	void scale(float scale) {
+		m_sprite.setScale(scale, scale);
 	}
 	void show()
 	{
@@ -105,28 +108,115 @@ public:
 	}
 };
 
+class PLAYER :public OBJECT {
+private:
+	int _anim = 0;
+	int _direction = 0;
+	sf::Sprite m_sprite[4][3];
+public:
+	
+	
+
+	PLAYER() {
+		m_showing = false;
+	}
+	PLAYER(sf::Texture& t) {
+		m_showing = false;
+	
+		set_name("NONAME");
+		//up
+		for (int j = 0; j < 3; ++j) {
+			m_sprite[0][j].setTexture(t);
+			m_sprite[0][j].setTextureRect(sf::IntRect(16 * j, 16 * 1, 16, 16));
+			m_sprite[0][j].setScale(4.f, 4.f);
+		}
+		//down
+		for (int j = 0; j < 3; ++j) {
+			m_sprite[1][j].setTexture(t);
+			m_sprite[1][j].setTextureRect(sf::IntRect(16 * j, 16 * 2, 16, 16));
+			m_sprite[1][j].setScale(4.f, 4.f);
+		}
+			
+		//left
+		for (int j = 0; j < 3; ++j) {
+			m_sprite[2][j].setTexture(t);
+			m_sprite[2][j].setTextureRect(sf::IntRect(16 * j, 16 * 0, 16, 16));
+			m_sprite[2][j].setScale(4.f, 4.f);
+		}
+		//right
+		for (int j = 0; j < 3; ++j) {
+			m_sprite[3][j].setTexture(t);
+			m_sprite[3][j].setTextureRect(sf::IntRect(16 * j, 16 * 0, 16, 16));
+			m_sprite[3][j].setScale(-4.f, 4.f);
+		}
+
+		m_mess_end_time = chrono::system_clock::now();
+	}
+
+	void set_direction(const int& dir) {
+		_direction = dir;
+		_anim = (_anim + 1) % 3;
+	}
+	
+
+	void draw() {
+		if (false == m_showing) return;
+		float rx = (m_x - g_left_x) * 65.0f + 1;
+		float ry = (m_y - g_top_y) * 65.0f + 1;
+		m_sprite[_direction][_anim].setPosition(rx, ry);
+		g_window->draw(m_sprite[_direction][_anim]);
+		auto size = m_name.getGlobalBounds();
+		if (m_mess_end_time < chrono::system_clock::now()) {
+			m_name.setPosition(rx + 32 - size.width / 2, ry - 10);
+			g_window->draw(m_name);
+		}
+		else {
+			m_chat.setPosition(rx + 32 - size.width / 2, ry - 10);
+			g_window->draw(m_chat);
+		}
+	}
+
+};
+
 OBJECT avatar;
 unordered_map <int, OBJECT> players;
 
 OBJECT white_tile;
 OBJECT black_tile;
 
+PLAYER player;
+
+
 sf::Texture* board;
 sf::Texture* pieces;
+
+sf::Texture* player_tex;
+sf::Texture* bg;
+
+
 
 void client_initialize()
 {
 	board = new sf::Texture;
 	pieces = new sf::Texture;
-	board->loadFromFile("chessmap.bmp");
+	bg = new sf::Texture;
+	player_tex = new sf::Texture;
+	board->loadFromFile(".\\resource\\grass-tile.png");
+	bg->loadFromFile(".\\resource\\grass-tile-2.png");
+
 	pieces->loadFromFile("chess2.png");
+
+	player_tex->loadFromFile(".\\resource\\hero.png");
+
 	if (false == g_font.loadFromFile("cour.ttf")) {
 		cout << "Font Loading Error!\n";
 		exit(-1);
 	}
-	white_tile = OBJECT{ *board, 5, 5, TILE_WIDTH, TILE_WIDTH };
-	black_tile = OBJECT{ *board, 69, 5, TILE_WIDTH, TILE_WIDTH };
-	avatar = OBJECT{ *pieces, 128, 0, 64, 64 };
+	white_tile = OBJECT{ *board, 0, 0, TILE_WIDTH, TILE_WIDTH };
+	black_tile = OBJECT{ *bg, 0, 0, TILE_WIDTH, TILE_WIDTH };
+	avatar = OBJECT{ *pieces, 128, 0, -64, 64 };
+	player = PLAYER{ *player_tex };
+	player.move(4, 4);
 	avatar.move(4, 4);
 }
 
@@ -148,8 +238,10 @@ void ProcessPacket(char* ptr)
 		g_myid = packet->id;
 		avatar.id = g_myid;
 		avatar.move(packet->x, packet->y);
+		player.move(packet->x, packet->y);
 		g_left_x = packet->x - SCREEN_WIDTH / 2;
 		g_top_y = packet->y - SCREEN_HEIGHT / 2;
+		player.show();
 		avatar.show();
 	}
 	break;
@@ -187,6 +279,8 @@ void ProcessPacket(char* ptr)
 		int other_id = my_packet->id;
 		if (other_id == g_myid) {
 			avatar.move(my_packet->x, my_packet->y);
+
+			player.move(my_packet->x, my_packet->y);
 			g_left_x = my_packet->x - SCREEN_WIDTH / 2;
 			g_top_y = my_packet->y - SCREEN_HEIGHT / 2;
 		}
@@ -289,7 +383,9 @@ void client_main()
 				black_tile.a_draw();
 			}
 		}
-	avatar.draw();
+	//avatar.draw();
+	//back.draw();
+	player.draw();
 	for (auto& pl : players) pl.second.draw();
 	sf::Text text;
 	text.setFont(g_font);
@@ -344,15 +440,19 @@ int main()
 				switch (event.key.code) {
 				case sf::Keyboard::Left:
 					direction = 2;
+					player.set_direction(direction);
 					break;
 				case sf::Keyboard::Right:
 					direction = 3;
+					player.set_direction(direction);
 					break;
 				case sf::Keyboard::Up:
 					direction = 0;
+					player.set_direction(direction);
 					break;
 				case sf::Keyboard::Down:
 					direction = 1;
+					player.set_direction(direction);
 					break;
 				case sf::Keyboard::Escape:
 					window.close();
@@ -365,6 +465,7 @@ int main()
 					p.direction = direction;
 					send_packet(&p);
 				}
+				
 
 			}
 		}
