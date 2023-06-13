@@ -158,6 +158,9 @@ public:
 		_anim = (_anim + 1) % 3;
 	}
 	
+	int get_direction() {
+		return _direction;
+	}
 
 	void draw() {
 		if (false == m_showing) return;
@@ -454,6 +457,21 @@ int main()
 					direction = 1;
 					player.set_direction(direction);
 					break;
+				case sf::Keyboard::A: { //ATTACK
+					CS_ATTACK_PACKET p;
+					p.size = sizeof(p);
+					p.type = CS_ATTACK;
+					send_packet(&p);
+					break;
+				}
+				case sf::Keyboard::T: {//Teleport
+					CS_TELEPORT_PACKET p;
+					p.size = sizeof(p);
+					p.type = CS_TELEPORT;
+					p.direction = player.get_direction();
+					send_packet(&p);
+					break;
+				}
 				case sf::Keyboard::Escape:
 					window.close();
 					break;

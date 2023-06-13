@@ -258,7 +258,9 @@ void process_packet(int c_id, char* packet)
 		}
 		clients[c_id].x = x;
 		clients[c_id].y = y;
-		cout << p->direction << " : " << clients[c_id].x << " : " << clients[c_id].y << endl;
+		
+		//cout << p->direction << " : " << clients[c_id].x << " : " << clients[c_id].y << endl;
+		
 		unordered_set<int> near_list;
 		clients[c_id]._vl.lock();
 		unordered_set<int> old_vlist = clients[c_id]._view_list;
@@ -298,8 +300,86 @@ void process_packet(int c_id, char* packet)
 					clients[pl].send_remove_player_packet(c_id);
 			}
 		}
-	}
 		break;
+	}
+	case CS_ATTACK: {
+		break;
+	}
+	case CS_TELEPORT: {
+		CS_TELEPORT_PACKET* p = reinterpret_cast<CS_TELEPORT_PACKET*>(packet);
+		
+		int move_factor = 10;
+
+		short x = clients[c_id].x;
+		short y = clients[c_id].y;
+		//추후 벽 생성시 벽인지 검사 필요
+		switch (p->direction) {
+		case 0: {
+			y -= move_factor;
+			if (y < 0) y = 0;
+			break;
+		}
+		case 1: {
+			y += move_factor;
+			if (y > W_HEIGHT) y = W_HEIGHT - 1;
+			break;
+		}
+		case 2: { 
+			x -= move_factor;
+			if (x < 0) x = 0;
+			break;
+		}
+		case 3: {
+			x += move_factor;
+			if (x > W_WIDTH) x = W_WIDTH - 1;
+			break;
+		}
+		}
+		clients[c_id].x = x;
+		clients[c_id].y = y;
+
+		unordered_set<int> near_list;
+		clients[c_id]._vl.lock();
+		unordered_set<int> old_vlist = clients[c_id]._view_list;
+		clients[c_id]._vl.unlock();
+		for (auto& cl : clients) {
+			if (cl._state != ST_INGAME) continue;
+			if (cl._id == c_id) continue;
+			if (can_see(c_id, cl._id))
+				near_list.insert(cl._id);
+		}
+
+		clients[c_id].send_move_packet(c_id);
+
+		for (auto& pl : near_list) {
+			auto& cpl = clients[pl];
+			if (is_pc(pl)) {
+				cpl._vl.lock();
+				if (clients[pl]._view_list.count(c_id)) {
+					cpl._vl.unlock();
+					clients[pl].send_move_packet(c_id);
+				}
+				else {
+					cpl._vl.unlock();
+					clients[pl].send_add_player_packet(c_id);
+				}
+			}
+			else WakeUpNPC(pl, c_id);
+
+			if (old_vlist.count(pl) == 0)
+				clients[c_id].send_add_player_packet(pl);
+		}
+
+		for (auto& pl : old_vlist) {
+			if (0 == near_list.count(pl)) {
+				clients[c_id].send_remove_player_packet(pl);
+				if (is_pc(pl))
+					clients[pl].send_remove_player_packet(c_id);
+			}
+		}
+
+		break;
+	}
 	}
 	printf("Unknown PACKET type [%d]\n", packet[2]);
 }

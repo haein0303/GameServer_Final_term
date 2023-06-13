@@ -49,9 +49,15 @@ struct CS_CHAT_PACKET {
 struct CS_TELEPORT_PACKET {
 	unsigned short size;
 	char	type;
+	char	direction;
 };
 
 struct CS_LOGOUT_PACKET {
+	unsigned short size;
+	char	type;
+};
+
+struct CS_ATTACK_PACKET {
 	unsigned short size;
 	char	type;
 };
