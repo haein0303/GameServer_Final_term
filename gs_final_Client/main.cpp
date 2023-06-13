@@ -11,7 +11,7 @@ using namespace std;
 #pragma comment (lib, "winmm.lib")
 #pragma comment (lib, "ws2_32.lib")
 
-#include "../gs_fianl_Server/protocol_2023.h"
+#include "..\gs_fianl_Server\protocol_2023.h"
 
 sf::TcpSocket s_socket;
 
@@ -140,7 +140,7 @@ void client_finish()
 void ProcessPacket(char* ptr)
 {
 	static bool first_time = true;
-	switch (ptr[1])
+	switch (ptr[2])
 	{
 	case SC_LOGIN_INFO:
 	{
@@ -234,7 +234,8 @@ void process_data(char* net_buf, size_t io_byte)
 	static char packet_buffer[BUF_SIZE];
 
 	while (0 != io_byte) {
-		if (0 == in_packet_size) in_packet_size = ptr[0];
+		if (0 == in_packet_size) in_packet_size = *reinterpret_cast<short*>(ptr);
+		cout << "in_packet_size : " << in_packet_size << endl;
 		if (io_byte + saved_packet_size >= in_packet_size) {
 			memcpy(packet_buffer + saved_packet_size, ptr, in_packet_size - saved_packet_size);
 			ProcessPacket(packet_buffer);
