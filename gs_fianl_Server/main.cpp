@@ -90,6 +90,8 @@ public:
 	int _target_id;
 	int _party_id;
 
+	int _base_x, _base_y;
+
 public:
 	SESSION()
 	{
@@ -722,22 +724,22 @@ void do_npc_random_move(int npc_id)
 	int y = npc.y;
 	switch (rand() % 4) {
 	case 0:
-		if (y > 0) {
+		if (y > 0 && abs(y - npc._base_y - 1) < 10) {
 			if (mapData[y - 1][x] == 1)	y--;
 		}
 		break;
 	case 1:
-		if (y < W_HEIGHT - 1) {
+		if (y < W_HEIGHT - 1 && abs(y - npc._base_y + 1) < 10) {
 			if (mapData[y + 1][x] == 1) y++;
 		}
 		break;
 	case 2:
-		if (x > 0) {
+		if (x > 0 && abs(x - npc._base_x - 1) < 10) {
 			if (mapData[y][x - 1] == 1) x--;
 		}
 		break;
 	case 3:
-		if (x < W_WIDTH - 1) {
+		if (x < W_WIDTH - 1 && abs(x - npc._base_x +1) < 10) {
 			if (mapData[y][x + 1] == 1) x++;
 		}
 		break;
@@ -1055,6 +1057,8 @@ void InitializeNPC()
 			clients[i].x = rand() % W_WIDTH;
 			clients[i].y = rand() % W_HEIGHT;
 		}
+		clients[i]._base_x = clients[i].x;
+		clients[i]._base_y = clients[i].y;
 		clients[i]._id = i;
 		sprintf_s(clients[i]._name, "NPC%d", i);
 		clients[i]._state = ST_INGAME;
