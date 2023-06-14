@@ -84,20 +84,20 @@ public:
 	}
 	void draw() {
 		if (false == m_showing) return;
-		float rx = (m_x - g_left_x) * 65.0f + 1;
-		float ry = (m_y - g_top_y) * 65.0f + 1;
+		float rx = (m_x - g_left_x) * TILE_WIDTH + 1;
+		float ry = (m_y - g_top_y) * TILE_WIDTH + 1;
 		m_sprite.setPosition(rx, ry);
 		g_window->draw(m_sprite);
 		auto size = m_name.getGlobalBounds();
 		if (m_mess_end_time < chrono::system_clock::now()) {
-			m_name.setPosition(rx + 32 - size.width / 2, ry - 10);
+			m_name.setPosition(rx - size.width / 2, ry - 10);
 			g_window->draw(m_name);
 		}
 		else {
-			m_chat.setPosition(rx + 32 - size.width / 2, ry - 10);
+			m_chat.setPosition(rx- size.width / 2, ry - 10);
 			g_window->draw(m_chat);
 		}
-		m_hp.setPosition(rx + 32 - size.width / 2, ry - 30);
+		m_hp.setPosition(rx - size.width / 2, ry - 30);
 		g_window->draw(m_hp);
 	}
 	void set_name(const char str[]) {
@@ -186,17 +186,17 @@ public:
 
 	void draw() {
 		if (false == m_showing) return;
-		float rx = (m_x - g_left_x) * 65.0f + 1;
-		float ry = (m_y - g_top_y) * 65.0f + 1;
+		float rx = (m_x - g_left_x) * TILE_WIDTH + 1;
+		float ry = (m_y - g_top_y) * TILE_WIDTH + 1;
 		m_sprite[_direction][_anim].setPosition(rx, ry);
 		g_window->draw(m_sprite[_direction][_anim]);
 		auto size = m_name.getGlobalBounds();
 		if (m_mess_end_time < chrono::system_clock::now()) {
-			m_name.setPosition(rx + 32 - size.width / 2, ry - 10);
+			m_name.setPosition(rx - size.width / 2, ry - 10);
 			g_window->draw(m_name);
 		}
 		else {
-			m_chat.setPosition(rx + 32 - size.width / 2, ry - 10);
+			m_chat.setPosition(rx - size.width / 2, ry - 10);
 			g_window->draw(m_chat);
 		}
 		m_hp.setPosition(rx + 32 - size.width / 2, ry - 30);
@@ -243,7 +243,7 @@ void client_initialize()
 	black_tile = OBJECT{ *bg, 0, 0, TILE_WIDTH, TILE_WIDTH };
 	avatar = OBJECT{ *pieces, 128, 0, -64, 64 };
 	player = PLAYER{ *player_tex };
-	player.move(4, 4);
+	//player.move(4, 4);
 	avatar.move(4, 4);
 }
 
@@ -402,22 +402,12 @@ void client_main()
 		
 		
 
-	for (int i = 0; i < SCREEN_WIDTH; ++i)
+	for (int i = 0; i < SCREEN_WIDTH; ++i) {
 		for (int j = 0; j < SCREEN_HEIGHT; ++j)
 		{
 			int tile_x = i + g_left_x;
 			int tile_y = j + g_top_y;
 			if ((tile_x < 0) || (tile_y < 0)) continue;
-			/*if (0 == (tile_x / 3 + tile_y / 3) % 2) {
-				white_tile.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
-				white_tile.a_draw();
-			}
-			else
-			{
-				black_tile.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
-				black_tile.a_draw();
-			}*/
-
 			if (mapData[tile_y][tile_x] == 1) {
 				white_tile.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
 				white_tile.a_draw();
@@ -428,6 +418,7 @@ void client_main()
 				black_tile.a_draw();
 			}
 		}
+	}
 	//avatar.draw();
 	//back.draw();
 	player.draw();

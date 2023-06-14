@@ -180,8 +180,8 @@ bool can_attack(int from, int to) {
 }
 
 int can_attack_npc(int from, int to) {
-	if (abs(clients[from].x - clients[to].x) > 2) return false;
-	return abs(clients[from].y - clients[to].y) <= 1;
+	return ((abs(clients[from].x - clients[to].x) == 0) && (abs(clients[from].y - clients[to].y) <= 1)) ||
+		((abs(clients[from].y - clients[to].y) == 0) && (abs(clients[from].x - clients[to].x) <= 1));	
 }
 
 void SESSION::send_move_packet(int c_id)
@@ -514,10 +514,26 @@ void do_npc_random_move(int npc_id)
 	int x = npc.x;
 	int y = npc.y;
 	switch (rand() % 4) {
-	case 0: if (x < (W_WIDTH - 1)) x++; break;
-	case 1: if (x > 0) x--; break;
-	case 2: if (y < (W_HEIGHT - 1)) y++; break;
-	case 3:if (y > 0) y--; break;
+	case 0:
+		if (y > 0) {
+			if (mapData[y - 1][x] == 1)	y--;
+		}
+		break;
+	case 1:
+		if (y < W_HEIGHT - 1) {
+			if (mapData[y + 1][x] == 1) y++;
+		}
+		break;
+	case 2:
+		if (x > 0) {
+			if (mapData[y][x - 1] == 1) x--;
+		}
+		break;
+	case 3:
+		if (x < W_WIDTH - 1) {
+			if (mapData[y][x + 1] == 1) x++;
+		}
+		break;
 	}
 	npc.x = x;
 	npc.y = y;
@@ -557,6 +573,13 @@ void do_npc_random_move(int npc_id)
 
 void do_npc_follow(int npc_id) {
 	SESSION& npc = clients[npc_id];
+
+	//혹시 접속 끊어버리면 그냥 리셋시켜부러
+	if (clients[npc._target_id]._state != ST_INGAME) {
+		npc._target_id = -1;
+		return;
+	}
+
 	unordered_set<int> old_vl;
 	for (auto& obj : clients) {
 		if (ST_INGAME != obj._state) continue;
@@ -571,21 +594,21 @@ void do_npc_follow(int npc_id) {
 	int t_x = clients[npc._target_id].x;
 	int t_y = clients[npc._target_id].y;
 
-	//절댓값을 구하기엔 귀찮으니깐
-	if ((x - t_x) * (x - t_x) > (y - t_y) * (y - t_y)) {
+	//일단은 따라만가는 멍청한 AI란다
+	if (abs(x - t_x) > abs(y - t_y)) {
 		if ((x - t_x) < 0) {
-			x++;
+			if (mapData[y][x + 1] == 1) x++;
 		}
 		else {
-			x--;
+			if (mapData[y][x - 1] == 1) x--;
 		}
 	}
 	else {
 		if ((y - t_y) < 0) {
-			y++;
+			if (mapData[y + 1][x] == 1) y++;
 		}
 		else {
-			y--;
+			if (mapData[y - 1][x] == 1)	y--;
 		}
 	}
 	
