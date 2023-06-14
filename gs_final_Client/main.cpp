@@ -226,6 +226,20 @@ bool is_chat_input = false;
 int msg_count = 0;
 char my_msg[CHAT_SIZE];
 
+int party_num = -1;
+
+struct P_data {
+	bool is_active = false;
+	int id;
+	int hp;
+	int max_hp;
+	char name[NAME_SIZE];
+};
+
+P_data party_data[MAX_PARTY];
+
+
+
 struct chat {
 	bool active = false;
 	char name[NAME_SIZE+2];
@@ -263,10 +277,6 @@ void client_initialize()
 	rectangle->setFillColor(sf::Color(0,0,0,128));
 	rectangle->setPosition(WINDOW_WIDTH - TILE_WIDTH * (SCREEN_WIDTH / 2), WINDOW_HEIGHT - TILE_WIDTH * (SCREEN_WIDTH / 3));
 	
-	
-	sprintf_s(msg_data[0].msg, "%s","TEST");
-	sprintf_s(msg_data[0].name, "%s", "GOOD");
-	msg_data[0].active = true;
 
 }
 
@@ -396,7 +406,61 @@ void ProcessPacket(char* ptr)
 		player.level = my_packet->level;
 		break;
 	}
+	case SC_P_CREATE: {
+		SC_P_CREATE_PACKET* my_packet = reinterpret_cast<SC_P_CREATE_PACKET*>(ptr);
+		party_num = my_packet->p_id;
+		print_chat("CREAT PARTY : GOOD", "SYSTEM");
+		break;
+	}
+	case SC_P_ENTER: {
+		SC_P_ENTER_PACKET* my_packet = reinterpret_cast<SC_P_ENTER_PACKET*>(ptr);
+		party_num = my_packet->p_id;
+		print_chat("JOIN PARTY : GOOD", "SYSTEM");
+		break;
+	}
+	case SC_P_JOIN: {
+		SC_P_JOIN_PACKET* my_packet = reinterpret_cast<SC_P_JOIN_PACKET*>(ptr);
+		int i;
+		for (i = 0; i < MAX_PARTY; ++i) {
+			if (party_data[i].is_active != true) break;
+		}
+		party_data[i].is_active = true;
+		party_data[i].id = my_packet->id;
+		party_data[i].hp = my_packet->hp;
+		party_data[i].max_hp = my_packet->max_hp;
+		sprintf_s(party_data[i].name, "%s", my_packet->name);
+		char tmp[100];
+		sprintf_s(tmp, "JOIN PARTY [%s]", party_data[i].name);
+		print_chat(tmp, "SYSTEM");
+		break;
+	}
+	case SC_P_EXIT: {
+		SC_P_EXIT_PACKET* my_packet = reinterpret_cast<SC_P_EXIT_PACKET*>(ptr);
+		for (int i = 0; i < MAX_PARTY; ++i) {
+			if (party_data[i].id == my_packet->id) {
+				party_data[i].is_active = false;
+				party_data[i].id = 0;
+				party_data[i].hp = 0;
+				party_data[i].max_hp = 0;
 
+				char tmp[100];
+				sprintf_s(tmp, "EXIT PARTY [%s]", party_data[i].name);
+				print_chat(tmp, "SYSTEM");
+
+				memset(party_data[i].name, '\0', NAME_SIZE);
+
+				break;
+			}
+		}
+		break;
+	}
+	case SC_P_STAT: {
+		SC_P_STAT_PACKET* my_packet = reinterpret_cast<SC_P_STAT_PACKET*>(ptr);
+		for (int i = 0; i < MAX_PARTY; ++i) {
+			if (party_data[i].id == my_packet->id) {
+			}
+		}
+	}
 	default:
 		printf("Unknown PACKET type [%d]\n", ptr[2]);
 	}
@@ -492,6 +556,20 @@ void client_main()
 	text.setString(my_msg);
 	text.setPosition(WINDOW_WIDTH - TILE_WIDTH * (SCREEN_WIDTH / 2), WINDOW_HEIGHT - 20);
 	g_window->draw(text);
+
+	text.setCharacterSize(20);
+	if (party_num != -1) {
+		int counter = 0;
+		for (int i = 0; i < MAX_PARTY; ++i) {
+			if (party_data[i].is_active == true) {
+				sprintf_s(buf, "[%s]%d/%d", party_data[i].name, party_data[i].hp, party_data[i].max_hp);
+				text.setString(buf);
+				text.setPosition(WINDOW_WIDTH, WINDOW_HEIGHT + counter*23 - (WINDOW_HEIGHT /2));
+				counter++;
+			}
+		}
+	}
+
 }
 
 void send_packet(void* packet)
@@ -598,14 +676,52 @@ int main()
 
 				if (is_chat_input) {
 					if (event.key.code == sf::Keyboard::Return) {
-						
-						CS_CHAT_PACKET p;
-						p.size = sizeof(p);
-						p.type = CS_CHAT;
-						my_msg[msg_count] = '\0';
-						sprintf_s(p.mess, "%s", my_msg);
-						send_packet(&p);
-						
+						bool toggle = true;
+						if (!strcmp(my_msg, "P CREATE")) {
+							if (party_num != -1) {
+								print_chat("YOU ENTER PARTY NOW", "SYSTEM");
+								continue;
+							}
+							CS_P_CREATE_PACKET p;
+							p.size = sizeof(p);
+							p.type = CS_P_CREATE;
+							send_packet(&p);
+							cout << "CREATE PARTY" << endl;
+							toggle = false;
+						}
+
+						if (!strcmp(my_msg, "P EXIT")) {
+							CS_P_EXIT_PACKET p;
+							p.size = sizeof(p);
+							p.type = CS_P_EXIT;
+							send_packet(&p);
+							cout << "EXIT PARTY" << endl;
+							toggle = false;
+						}
+
+						char* ptr = strstr(my_msg, "P JOIN");
+						if (ptr != nullptr) {
+							if (party_num != -1) {
+								print_chat("YOU TRY TO ENTER PARTY", "SYSTEM");
+								continue;
+							}
+							CS_P_JOIN_PACKET p;
+							p.size = sizeof(p);
+							p.type = CS_P_JOIN;
+							p.p_num = atoi(ptr + 7);
+							send_packet(&p);
+							toggle = false;
+						}
+
+						if (toggle) {
+							CS_CHAT_PACKET p;
+							p.size = sizeof(p);
+							p.type = CS_CHAT;
+							my_msg[msg_count] = '\0';
+							sprintf_s(p.mess, "%s", my_msg);
+							send_packet(&p);
+						}	
+
 						memset(my_msg, '\0', CHAT_SIZE);
 
 						msg_count = 0;
@@ -620,9 +736,22 @@ int main()
 						my_msg[msg_count--] = '\0';
 						continue;
 					}
-
-					if (event.key.code < 0 && event.key.code >('Z' - 'A')) continue;
+					if (event.key.code >= sf::Keyboard::Numpad0 && event.key.code <= sf::Keyboard::Numpad9) {
+						my_msg[msg_count++] = '0' + event.key.code - sf::Keyboard::Numpad0;
+						continue;
+					}
+					if (event.key.code >= sf::Keyboard::Num0 && event.key.code <= sf::Keyboard::Num9) {
+						my_msg[msg_count++] = '0' + event.key.code - sf::Keyboard::Num0;
+						continue;
+					}
+					if (event.key.code < 0 && event.key.code >('Z' - 'A')) {
+						continue;
+					}
 					if (msg_count > CHAT_SIZE - 2) continue;
+					if (event.key.code == sf::Keyboard::Space) {
+						my_msg[msg_count++] = ' ';
+						continue;
+					}
 
 					my_msg[msg_count++] = 'A' + event.key.code;
 

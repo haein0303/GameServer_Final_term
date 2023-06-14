@@ -5,6 +5,7 @@ constexpr int CHAT_SIZE = 100;
 
 constexpr int MAX_USER = 10000;
 constexpr int MAX_NPC = 20000;
+constexpr int MAX_PARTY = 4;
 
 constexpr int W_WIDTH = 2000;
 constexpr int W_HEIGHT = 2000;
@@ -17,6 +18,11 @@ constexpr char CS_ATTACK = 3;			// 4 방향 공격
 constexpr char CS_TELEPORT = 4;			// RANDOM한 위치로 Teleport, Stress Test할 때 Hot Spot현상을 피하기 위해 구현
 constexpr char CS_LOGOUT = 5;			// 클라이언트에서 정상적으로 접속을 종료하는 패킷
 
+constexpr char CS_P_CREATE = 6;
+constexpr char CS_P_JOIN = 7;
+constexpr char CS_P_EXIT = 8;
+
+
 constexpr char SC_LOGIN_INFO = 2;
 constexpr char SC_ADD_OBJECT = 3;
 constexpr char SC_REMOVE_OBJECT = 4;
@@ -26,6 +32,13 @@ constexpr char SC_LOGIN_OK = 7;
 constexpr char SC_LOGIN_FAIL = 8;
 constexpr char SC_STAT_CHANGE = 9;
 constexpr char SC_DIE_OBJECT = 10;
+
+constexpr char SC_P_CREATE = 11;
+constexpr char SC_P_JOIN = 12;
+constexpr char SC_P_STAT = 13;
+constexpr char SC_P_EXIT = 14; 
+constexpr char SC_P_ENTER = 15;
+
 
 #pragma pack (push, 1)
 struct CS_LOGIN_PACKET {
@@ -63,6 +76,23 @@ struct CS_ATTACK_PACKET {
 	char	type;
 	char	atk_type;
 };
+
+struct CS_P_CREATE_PACKET {
+	unsigned short size;
+	char	type;
+};
+
+struct CS_P_JOIN_PACKET {
+	unsigned short size;
+	char	type;
+	int		p_num;
+};
+
+struct CS_P_EXIT_PACKET {
+	unsigned short size;
+	char	type;
+};
+
 
 struct SC_LOGIN_INFO_PACKET {
 	unsigned short size;
@@ -132,6 +162,42 @@ struct SC_DIE_OBJECT_PACKET {
 	char	type;
 	int		id;
 	int		exp;
+};
+
+struct SC_P_CREATE_PACKET {
+	unsigned short size;
+	char	type;
+	int		id;
+	int		p_id;
+};
+
+struct SC_P_JOIN_PACKET {
+	unsigned short size;
+	char	type;
+	int		id;
+	int		hp;
+	int		max_hp;
+	char	name[NAME_SIZE];
+};
+
+struct SC_P_STAT_PACKET {
+	unsigned short size;
+	char	type;
+	int		id;
+	int		hp;
+};
+
+struct SC_P_EXIT_PACKET {
+	unsigned short size;
+	char	type;
+	int		id;
+};
+
+struct SC_P_ENTER_PACKET {
+	unsigned short size;
+	char	type;
+	int		id;
+	int		p_id;
 };
 
 #pragma pack (pop)

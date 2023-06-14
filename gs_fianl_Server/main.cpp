@@ -6,6 +6,7 @@
 #include <vector>
 #include <mutex>
 #include <unordered_set>
+#include <unordered_map>
 #include <concurrent_priority_queue.h>
 #include <fstream>
 #include <string>
@@ -137,6 +138,11 @@ public:
 	void send_remove_player_packet(int c_id);
 
 	void send_die_packet(int c_id, int exp);
+	void send_p_create_packet(int c_id, int p_num);
+	void send_p_enter_packet(int c_id, int p_num);
+	void send_p_stat_packet(int c_id);
+	void send_p_join_packet(int c_id);
+	void send_p_exit_packet(int c_id);
 };
 
 HANDLE h_iocp;
@@ -144,6 +150,45 @@ array<SESSION, MAX_USER + MAX_NPC> clients;
 
 SOCKET g_s_socket, g_c_socket;
 OVER_EXP g_a_over;
+
+class PARTY {
+public:
+	int _p_num;
+	int _player_id[MAX_PARTY] = {-1};
+	int _player_count;
+public:
+	PARTY() {
+		_player_count = 0;
+		_p_num = -1;
+	}
+	PARTY(int p_num) {
+		_p_num = p_num;
+	}
+	//조인 가능하면 1, 아니면 0
+	int join(int id) {
+		for (int i = 0; i < MAX_PARTY; ++i) {
+			if (_player_id[i] == -1) {
+				_player_id[i] = id;
+				return 1;
+			}
+		}
+		return 0;
+	}
+
+	int exit(int id) {
+		for (int i = 0; i < MAX_PARTY; ++i) {
+			if (_player_id[i] == id) {
+				_player_id[i] = -1;
+				return 1;
+			}
+		}
+		return 0;
+	}
+};
+
+unsigned int party_counter = 0;
+std::unordered_map<unsigned int, PARTY> party_map;
+
 
 bool is_pc(int object_id)
 {
@@ -245,6 +290,57 @@ void SESSION::send_die_packet(int c_id, int exp)
 	p.exp = exp;
 	do_send(&p);
 
+}
+
+void SESSION::send_p_create_packet(int c_id, int p_num)
+{
+	SC_P_CREATE_PACKET p;
+	p.id = c_id;
+	p.size = sizeof(SC_P_CREATE_PACKET);
+	p.type = SC_P_CREATE;
+	p.p_id = p_num;
+	do_send(&p);
+}
+
+void SESSION::send_p_enter_packet(int c_id, int p_num)
+{
+	SC_P_ENTER_PACKET p;
+	p.id = c_id;
+	p.size = sizeof(SC_P_ENTER_PACKET);
+	p.type = SC_P_ENTER;
+	p.p_id = p_num;
+	do_send(&p);
+}
+
+void SESSION::send_p_stat_packet(int c_id)
+{
+	SC_P_STAT_PACKET p;
+	p.id = c_id;
+	p.size = sizeof(SC_P_STAT_PACKET);
+	p.type = SC_P_STAT;
+	p.hp = clients[c_id]._hp;
+	do_send(&p);
+}
+
+void SESSION::send_p_join_packet(int c_id)
+{
+	SC_P_JOIN_PACKET p;
+	p.id = c_id;
+	p.size = sizeof(SC_P_JOIN_PACKET);
+	p.type = SC_P_JOIN;
+	p.hp = clients[c_id]._hp;
+	p.max_hp = clients[c_id]._max_hp;
+	sprintf_s(p.name, "%s", clients[c_id]._name);
+	do_send(&p);
+}
+
+void SESSION::send_p_exit_packet(int c_id)
+{
+	SC_P_EXIT_PACKET p;
+	p.id = c_id;
+	p.size = sizeof(SC_P_EXIT_PACKET);
+	p.type = SC_P_EXIT;
+	do_send(&p);
 }
 
 int get_new_client_id()
@@ -521,6 +617,9 @@ void process_packet(int c_id, char* packet)
 			if (clients[i]._state != ST_INGAME) continue;
 			clients[i].send_chat_packet(c_id, p->mess);
 		}
+		break;
+	}
+	case CS_P_CREATE: {//todo : 03:17 여기서부터 작업해야됨. 클라이언트에서 파티 접속 요청 보내면, 만들어주기
 		break;
 	}
 	}
