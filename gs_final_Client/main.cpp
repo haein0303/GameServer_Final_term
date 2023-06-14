@@ -261,7 +261,7 @@ void client_initialize()
 	board->loadFromFile(".\\resource\\grass-tile.png");
 	bg->loadFromFile(".\\resource\\ground2.png");
 
-	pieces->loadFromFile("chess2.png");
+	pieces->loadFromFile(".\\resource\\npc.png");
 
 	player_tex->loadFromFile(".\\resource\\hero.png");
 
@@ -271,7 +271,7 @@ void client_initialize()
 	}
 	white_tile = OBJECT{ *board, 0, 0, TILE_WIDTH, TILE_WIDTH };
 	black_tile = OBJECT{ *bg, 0, 0, TILE_WIDTH, TILE_WIDTH };
-	avatar = OBJECT{ *pieces, 128, 0, -64, 64 };
+	avatar = OBJECT{ *pieces, 0, 0, 16, 16 };
 	player = PLAYER{ *player_tex };
 	
 	rectangle->setFillColor(sf::Color(0,0,0,128));
@@ -325,19 +325,21 @@ void ProcessPacket(char* ptr)
 			player.show();
 		}
 		else if (id < MAX_USER) {
-			players[id] = OBJECT{ *pieces, 0, 0, 64, 64 };
+			players[id] = OBJECT{ *pieces, 0, 0, 16, 16 };
 			players[id].id = id;
 			players[id].move(my_packet->x, my_packet->y);
 			players[id].set_name(my_packet->name);
 			players[id].set_hp(my_packet->hp);
+			players[id].scale(4.0f);
 			players[id].show();
 		}
 		else {
-			players[id] = OBJECT{ *pieces, 256, 0, 64, 64 };
+			players[id] = OBJECT{ *pieces, 0, 16, 16, 16 };
 			players[id].id = id;
 			players[id].move(my_packet->x, my_packet->y);
 			players[id].set_name(my_packet->name);
 			players[id].set_hp(my_packet->hp);
+			players[id].scale(4.0f);
 			players[id].show();
 		}
 		break;
