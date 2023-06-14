@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <Windows.h>
 #include <chrono>
+#include <fstream>
 using namespace std;
 
 #pragma comment (lib, "opengl32.lib")
@@ -28,6 +29,8 @@ int g_myid;
 
 sf::RenderWindow* g_window;
 sf::Font g_font;
+
+std::vector<std::vector<char>> mapData;
 
 class OBJECT {
 protected:
@@ -226,7 +229,7 @@ void client_initialize()
 	bg = new sf::Texture;
 	player_tex = new sf::Texture;
 	board->loadFromFile(".\\resource\\grass-tile.png");
-	bg->loadFromFile(".\\resource\\grass-tile-2.png");
+	bg->loadFromFile(".\\resource\\ground2.png");
 
 	pieces->loadFromFile("chess2.png");
 
@@ -261,13 +264,11 @@ void ProcessPacket(char* ptr)
 		SC_LOGIN_INFO_PACKET* packet = reinterpret_cast<SC_LOGIN_INFO_PACKET*>(ptr);
 		g_myid = packet->id;
 		avatar.id = g_myid;
-		avatar.move(packet->x, packet->y);
 		player.move(packet->x, packet->y);
 		g_left_x = packet->x - SCREEN_WIDTH / 2;
 		g_top_y = packet->y - SCREEN_HEIGHT / 2;
 		player.set_hp(packet->hp);
-		player.show();
-		avatar.show();
+		player.show();		
 	}
 	break;
 
@@ -277,10 +278,10 @@ void ProcessPacket(char* ptr)
 		int id = my_packet->id;
 
 		if (id == g_myid) {
-			avatar.move(my_packet->x, my_packet->y);
+			player.move(my_packet->x, my_packet->y);
 			g_left_x = my_packet->x - SCREEN_WIDTH / 2;
 			g_top_y = my_packet->y - SCREEN_HEIGHT / 2;
-			avatar.show();
+			player.show();
 		}
 		else if (id < MAX_USER) {
 			players[id] = OBJECT{ *pieces, 0, 0, 64, 64 };
@@ -304,9 +305,7 @@ void ProcessPacket(char* ptr)
 	{
 		SC_MOVE_OBJECT_PACKET* my_packet = reinterpret_cast<SC_MOVE_OBJECT_PACKET*>(ptr);
 		int other_id = my_packet->id;
-		if (other_id == g_myid) {
-			//avatar.move(my_packet->x, my_packet->y);
-
+		if (other_id == g_myid) {			
 			player.move(my_packet->x, my_packet->y);
 			g_left_x = my_packet->x - SCREEN_WIDTH / 2;
 			g_top_y = my_packet->y - SCREEN_HEIGHT / 2;
@@ -349,7 +348,6 @@ void ProcessPacket(char* ptr)
 		player._max_hp = my_packet->max_hp;
 		player.exp = my_packet->exp;
 		player.level = my_packet->level;
-
 		break;
 	}
 
@@ -410,7 +408,17 @@ void client_main()
 			int tile_x = i + g_left_x;
 			int tile_y = j + g_top_y;
 			if ((tile_x < 0) || (tile_y < 0)) continue;
-			if (0 == (tile_x / 3 + tile_y / 3) % 2) {
+			/*if (0 == (tile_x / 3 + tile_y / 3) % 2) {
+				white_tile.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
+				white_tile.a_draw();
+			}
+			else
+			{
+				black_tile.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
+				black_tile.a_draw();
+			}*/
+
+			if (mapData[tile_y][tile_x] == 1) {
 				white_tile.a_move(TILE_WIDTH * i, TILE_WIDTH * j);
 				white_tile.a_draw();
 			}
@@ -427,7 +435,7 @@ void client_main()
 	sf::Text text;
 	text.setFont(g_font);
 	char buf[100];
-	sprintf_s(buf, "(%d, %d)", avatar.m_x, avatar.m_y);
+	sprintf_s(buf, "(%d, %d)", player.m_x, player.m_y);
 	text.setString(buf);
 	g_window->draw(text);
 }
@@ -439,6 +447,32 @@ void send_packet(void* packet)
 	s_socket.send(packet, p[0], sent);
 }
 
+
+void loadMap(const std::string& filename) {
+	std::ifstream file(filename);
+	if (!file.is_open()) {
+		std::cout << "파일을 열 수 없습니다." << std::endl;
+		return;
+	}
+
+	mapData.resize(W_HEIGHT, std::vector<char>(W_WIDTH, 0));
+
+	std::string line;
+	for (int y = 0; y < W_HEIGHT; ++y) {
+		if (std::getline(file, line)) {
+			for (int x = 0; x < W_WIDTH; ++x) {
+				if (line[x] == '1') {
+					mapData[y][x] = 1;
+				}
+			}
+		}
+	}
+
+	file.close();
+	std::cout << "맵 데이터를 불러왔습니다." << std::endl;
+}
+
+
 int main()
 {
 	wcout.imbue(locale("korean"));
@@ -449,6 +483,9 @@ int main()
 		wcout << L"server is not open.\n";
 		exit(-1);
 	}
+
+	std::string filename = "map.txt";
+	loadMap(filename);
 
 
 	client_initialize();
@@ -462,8 +499,7 @@ int main()
 
 	strcpy_s(p.name, player_name.c_str());
 	send_packet(&p);
-	avatar.set_name(p.name);
-
+	player.set_name(p.name);
 	sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "2D CLIENT");
 	g_window = &window;
 
@@ -497,8 +533,18 @@ int main()
 					CS_ATTACK_PACKET p;
 					p.size = sizeof(p);
 					p.type = CS_ATTACK;
+					p.atk_type = 0;
 					send_packet(&p);
 					printf("ATK\n");
+					break;
+				}
+				case sf::Keyboard::S: { //ATTACK
+					CS_ATTACK_PACKET p;
+					p.size = sizeof(p);
+					p.type = CS_ATTACK;
+					p.atk_type = 1;
+					send_packet(&p);
+					printf("ATK_SKILL\n");
 					break;
 				}
 				case sf::Keyboard::T: {//Teleport

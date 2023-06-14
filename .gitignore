@@ -31,7 +31,10 @@
 *.out
 *.app
 
-*.vs
-*x64
+*.vs/
+*x64/
+*v17/
+
 !GameServer_Final_term/gs_fianl_Server/include/
 !GameServer_Final_term/gs_fianl_Server/*.dll
+

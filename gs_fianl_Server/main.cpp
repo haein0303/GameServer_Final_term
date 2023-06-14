@@ -7,6 +7,8 @@
 #include <mutex>
 #include <unordered_set>
 #include <concurrent_priority_queue.h>
+#include <fstream>
+#include <string>
 #include "protocol_2023.h"
 
 #include "include/lua.hpp"
@@ -19,6 +21,10 @@ using namespace std;
 constexpr int VIEW_RANGE = 5;
 constexpr int ATK_RANGE = 2;
 enum EVENT_TYPE { EV_RANDOM_MOVE };
+
+
+
+std::vector<std::vector<char>> mapData;
 
 struct TIMER_EVENT {
 	int obj_id;
@@ -80,6 +86,8 @@ public:
 	int _hp;
 	int _max_hp;
 
+	int _target_id;
+
 public:
 	SESSION()
 	{
@@ -91,6 +99,7 @@ public:
 		_prev_remain = 0;
 		_hp = 100;
 		_max_hp = 100;
+		_target_id = -1;
 	}
 
 	~SESSION() {}
@@ -170,6 +179,11 @@ bool can_attack(int from, int to) {
 	return abs(clients[from].y - clients[to].y) <= ATK_RANGE;
 }
 
+int can_attack_npc(int from, int to) {
+	if (abs(clients[from].x - clients[to].x) > 2) return false;
+	return abs(clients[from].y - clients[to].y) <= 1;
+}
+
 void SESSION::send_move_packet(int c_id)
 {
 	SC_MOVE_OBJECT_PACKET p;
@@ -179,6 +193,7 @@ void SESSION::send_move_packet(int c_id)
 	p.x = clients[c_id].x;
 	p.y = clients[c_id].y;
 	p.move_time = clients[c_id].last_move_time;
+	p.hp = clients[c_id]._hp;
 	do_send(&p);
 }
 
@@ -191,6 +206,7 @@ void SESSION::send_add_player_packet(int c_id)
 	add_packet.type = SC_ADD_OBJECT;
 	add_packet.x = clients[c_id].x;
 	add_packet.y = clients[c_id].y;
+	add_packet.hp = clients[c_id]._hp;
 	_vl.lock();
 	_view_list.insert(c_id);
 	_vl.unlock();
@@ -232,6 +248,7 @@ void WakeUpNPC(int npc_id, int waker)
 	timer_queue.push(ev);
 }
 
+
 void process_packet(int c_id, char* packet)
 {
 	switch (packet[2]) {
@@ -265,15 +282,29 @@ void process_packet(int c_id, char* packet)
 		short x = clients[c_id].x;
 		short y = clients[c_id].y;
 		switch (p->direction) {
-		case 0: if (y > 0) y--; break;
-		case 1: if (y < W_HEIGHT - 1) y++; break;
-		case 2: if (x > 0) x--; break;
-		case 3: if (x < W_WIDTH - 1) x++; break;
+		case 0: 
+			if (y > 0) {
+				if (mapData[y - 1][x] == 1)	y--;
+			}
+			break;
+		case 1:
+			if (y < W_HEIGHT - 1) {
+				if(mapData[y + 1][x] == 1) y++;
+			}
+			break;
+		case 2: 
+			if (x > 0) {
+				if (mapData[y][x - 1] == 1) x--;
+			}
+			break;
+		case 3: 
+			if (x < W_WIDTH - 1) {
+				if (mapData[y][x + 1] == 1) x++;
+			}
+			break;
 		}
 		clients[c_id].x = x;
 		clients[c_id].y = y;
-		
-		//cout << p->direction << " : " << clients[c_id].x << " : " << clients[c_id].y << endl;
 		
 		unordered_set<int> near_list;
 		clients[c_id]._vl.lock();
@@ -318,25 +349,51 @@ void process_packet(int c_id, char* packet)
 	}
 	case CS_ATTACK: {
 		//보이는 애들만 검사하자
-
+		CS_ATTACK_PACKET* p = reinterpret_cast<CS_ATTACK_PACKET*>(packet);
 		unordered_set<int> near_list;
 		clients[c_id]._vl.lock();
 		near_list = clients[c_id]._view_list;
 		clients[c_id]._vl.unlock();
-		for (int p : clients[c_id]._view_list) {
+		for (int pa : clients[c_id]._view_list) {
 			//공격 가능하니?
-			if (can_attack(c_id, p)) {
+			if (can_attack(c_id, pa)) {
 				//피통 빼주고
-				clients[p]._hp -= 10;
-				printf("(ATK) player[%d]->NPC[%d] : hp(%d)\n", c_id, p, clients[p]._hp);
-				//피통 빼진거 전송하자
-				//근데 무브 패킷을 재활용해서하자
+				switch (p->atk_type) {
+				case 0:
+					clients[pa]._hp -= 10;
+					break;
+				case 1:
+					clients[pa]._hp -= 50;
+					break;
+				}
+				
+				
+				printf("(ATK) player[%d]->NPC[%d] : hp(%d)\n", c_id, pa, clients[pa]._hp);
 
-				for (int pl : clients[p]._view_list) {
-					if (is_pc(pl)) {
-						clients[pl].send_move_packet(p);
+				//피통 빼진거 전송하자
+				
+				unordered_set<int> l_list;
+
+				clients[pa]._vl.lock();
+				l_list = clients[pa]._view_list;
+				clients[pa]._vl.unlock();
+
+				if (clients[pa]._hp <= 0) {
+					//나중에 재활용할 수 있으니깐
+					clients[pa]._target_id = -1;
+				}
+				else {
+					//근데 무브 패킷을 재활용해서 하자
+					clients[c_id].send_move_packet(pa);
+					clients[pa]._target_id = c_id;
+					for (int pl : l_list) {
+						if (is_pc(pl)) {
+							clients[pl].send_move_packet(pa);
+						}
 					}
 				}
+				
+				
 			}
 
 		}
@@ -498,6 +555,76 @@ void do_npc_random_move(int npc_id)
 	}
 }
 
+void do_npc_follow(int npc_id) {
+	SESSION& npc = clients[npc_id];
+	unordered_set<int> old_vl;
+	for (auto& obj : clients) {
+		if (ST_INGAME != obj._state) continue;
+		if (true == is_npc(obj._id)) continue;
+		if (true == can_see(npc._id, obj._id))
+			old_vl.insert(obj._id);
+	}
+
+	int x = npc.x;
+	int y = npc.y;
+
+	int t_x = clients[npc._target_id].x;
+	int t_y = clients[npc._target_id].y;
+
+	//절댓값을 구하기엔 귀찮으니깐
+	if ((x - t_x) * (x - t_x) > (y - t_y) * (y - t_y)) {
+		if ((x - t_x) < 0) {
+			x++;
+		}
+		else {
+			x--;
+		}
+	}
+	else {
+		if ((y - t_y) < 0) {
+			y++;
+		}
+		else {
+			y--;
+		}
+	}
+	
+	npc.x = x;
+	npc.y = y;
+
+	unordered_set<int> new_vl;
+	for (auto& obj : clients) {
+		if (ST_INGAME != obj._state) continue;
+		if (true == is_npc(obj._id)) continue;
+		if (true == can_see(npc._id, obj._id))
+			new_vl.insert(obj._id);
+	}
+
+	for (auto pl : new_vl) {
+		if (0 == old_vl.count(pl)) {
+			// 플레이어의 시야에 등장
+			clients[pl].send_add_player_packet(npc._id);
+		}
+		else {
+			// 플레이어가 계속 보고 있음.
+			clients[pl].send_move_packet(npc._id);
+		}
+	}
+
+	for (auto pl : old_vl) {
+		if (0 == new_vl.count(pl)) {
+			clients[pl]._vl.lock();
+			if (0 != clients[pl]._view_list.count(npc._id)) {
+				clients[pl]._vl.unlock();
+				clients[pl].send_remove_player_packet(npc._id);
+			}
+			else {
+				clients[pl]._vl.unlock();
+			}
+		}
+	}
+}
+
 void worker_thread(HANDLE h_iocp)
 {
 	while (true) {
@@ -582,7 +709,13 @@ void worker_thread(HANDLE h_iocp)
 				}
 			}
 			if (true == keep_alive) {
-				do_npc_random_move(static_cast<int>(key));
+				if (clients[key]._target_id == -1) {
+					do_npc_random_move(static_cast<int>(key));
+				}
+				else {
+					do_npc_follow(static_cast<int>(key));
+				}
+				
 				TIMER_EVENT ev{ key, chrono::system_clock::now() + 1s, EV_RANDOM_MOVE, 0 };
 				timer_queue.push(ev);
 			}
@@ -590,20 +723,21 @@ void worker_thread(HANDLE h_iocp)
 				clients[key]._is_active = false;
 			}
 			delete ex_over;
+
+			break;
 		}
-						break;
+						
 		case OP_AI_HELLO: {
 			clients[key]._ll.lock();
 			auto L = clients[key]._L;
-			lua_getglobal(L, "event_player_move");
+			/*lua_getglobal(L, "event_player_move");
 			lua_pushnumber(L, ex_over->_ai_target_obj);
 			lua_pcall(L, 1, 0, 0);
-			lua_pop(L, 1);
+			lua_pop(L, 1);*/
 			clients[key]._ll.unlock();
 			delete ex_over;
+			break;
 		}
-						break;
-
 		}
 	}
 }
@@ -646,9 +780,15 @@ void InitializeNPC()
 	for (int i = MAX_USER; i < MAX_USER + MAX_NPC; ++i) {
 		clients[i].x = rand() % W_WIDTH;
 		clients[i].y = rand() % W_HEIGHT;
+
+		while (mapData[clients[i].y][clients[i].x] != 0) {
+			clients[i].x = rand() % W_WIDTH;
+			clients[i].y = rand() % W_HEIGHT;
+		}
 		clients[i]._id = i;
 		sprintf_s(clients[i]._name, "NPC%d", i);
 		clients[i]._state = ST_INGAME;
+		clients[i]._hp = 100;
 
 		auto L = clients[i]._L = luaL_newstate();
 		luaL_openlibs(L);
@@ -692,6 +832,30 @@ void do_timer()
 	}
 }
 
+void loadMap(const std::string& filename) {
+	std::ifstream file(filename);
+	if (!file.is_open()) {
+		std::cout << "파일을 열 수 없습니다." << std::endl;
+		return;
+	}
+
+	mapData.resize(W_HEIGHT, std::vector<char>(W_WIDTH, 0));
+
+	std::string line;
+	for (int y = 0; y < W_HEIGHT; ++y) {
+		if (std::getline(file, line)) {
+			for (int x = 0; x < W_WIDTH; ++x) {
+				if (line[x] == '1') {
+					mapData[y][x] = 1;
+				}
+			}
+		}
+	}
+
+	file.close();
+	std::cout << "맵 데이터를 불러왔습니다." << std::endl;
+}
+
 int main()
 {
 	WSADATA WSAData;
@@ -706,6 +870,9 @@ int main()
 	listen(g_s_socket, SOMAXCONN);
 	SOCKADDR_IN cl_addr;
 	int addr_size = sizeof(cl_addr);
+
+	std::string filename = "map.txt";
+	loadMap(filename);
 
 	InitializeNPC();
 

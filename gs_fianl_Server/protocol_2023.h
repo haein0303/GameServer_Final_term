@@ -60,6 +60,7 @@ struct CS_LOGOUT_PACKET {
 struct CS_ATTACK_PACKET {
 	unsigned short size;
 	char	type;
+	char	atk_type;
 };
 
 struct SC_LOGIN_INFO_PACKET {
