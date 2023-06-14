@@ -207,6 +207,7 @@ void SESSION::send_chat_packet(int p_id, const char* mess)
 	packet.size = sizeof(packet);
 	packet.type = SC_CHAT;
 	strcpy_s(packet.mess, mess);
+	strcpy_s(packet.name, clients[p_id]._name);
 	do_send(&packet);
 }
 
@@ -512,6 +513,14 @@ void process_packet(int c_id, char* packet)
 			}
 		}
 
+		break;
+	}
+	case CS_CHAT: {
+		CS_CHAT_PACKET* p = reinterpret_cast<CS_CHAT_PACKET*>(packet);
+		for (int i = 0; i < MAX_USER; ++i) {
+			if (clients[i]._state != ST_INGAME) continue;
+			clients[i].send_chat_packet(c_id, p->mess);
+		}
 		break;
 	}
 	}
@@ -825,10 +834,10 @@ void worker_thread(HANDLE h_iocp)
 		case OP_AI_HELLO: {
 			clients[key]._ll.lock();
 			auto L = clients[key]._L;
-			/*lua_getglobal(L, "event_player_move");
+			lua_getglobal(L, "event_player_move");
 			lua_pushnumber(L, ex_over->_ai_target_obj);
 			lua_pcall(L, 1, 0, 0);
-			lua_pop(L, 1);*/
+			lua_pop(L, 1);
 			clients[key]._ll.unlock();
 			delete ex_over;
 			break;

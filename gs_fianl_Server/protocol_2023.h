@@ -103,6 +103,7 @@ struct SC_CHAT_PACKET {
 	unsigned short size;
 	char	type;
 	int		id;
+	char	name[NAME_SIZE];
 	char	mess[CHAT_SIZE];
 };
 

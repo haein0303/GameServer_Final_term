@@ -220,7 +220,20 @@ sf::Texture* pieces;
 sf::Texture* player_tex;
 sf::Texture* bg;
 
+sf::RectangleShape* rectangle;
 
+bool is_chat_input = false;
+int msg_count = 0;
+char my_msg[CHAT_SIZE];
+
+struct chat {
+	bool active = false;
+	char name[NAME_SIZE+2];
+	char msg[CHAT_SIZE+2];
+};
+
+int act_chat = 1;
+chat msg_data[10];
 
 void client_initialize()
 {
@@ -228,6 +241,9 @@ void client_initialize()
 	pieces = new sf::Texture;
 	bg = new sf::Texture;
 	player_tex = new sf::Texture;
+
+	rectangle = new sf::RectangleShape(sf::Vector2f(TILE_WIDTH * (SCREEN_WIDTH / 2), TILE_WIDTH * (SCREEN_WIDTH / 3)));
+
 	board->loadFromFile(".\\resource\\grass-tile.png");
 	bg->loadFromFile(".\\resource\\ground2.png");
 
@@ -243,8 +259,15 @@ void client_initialize()
 	black_tile = OBJECT{ *bg, 0, 0, TILE_WIDTH, TILE_WIDTH };
 	avatar = OBJECT{ *pieces, 128, 0, -64, 64 };
 	player = PLAYER{ *player_tex };
-	//player.move(4, 4);
-	avatar.move(4, 4);
+	
+	rectangle->setFillColor(sf::Color(0,0,0,128));
+	rectangle->setPosition(WINDOW_WIDTH - TILE_WIDTH * (SCREEN_WIDTH / 2), WINDOW_HEIGHT - TILE_WIDTH * (SCREEN_WIDTH / 3));
+	
+	
+	sprintf_s(msg_data[0].msg, "%s","TEST");
+	sprintf_s(msg_data[0].name, "%s", "GOOD");
+	msg_data[0].active = true;
+
 }
 
 void client_finish()
@@ -252,6 +275,14 @@ void client_finish()
 	players.clear();
 	delete board;
 	delete pieces;
+}
+
+void print_chat(const char* msg, const char* name) {
+	sprintf_s(msg_data[act_chat].msg, "%s", msg);
+	sprintf_s(msg_data[act_chat].name, "%s", name);
+	msg_data[act_chat].active = true;
+	printf("[%s]%s\n", msg_data[act_chat].name, msg_data[act_chat].msg);
+	act_chat++;
 }
 
 void ProcessPacket(char* ptr)
@@ -354,7 +385,7 @@ void ProcessPacket(char* ptr)
 		else {
 			players[other_id].set_chat(my_packet->mess);
 		}
-
+		print_chat(my_packet->mess, my_packet->name);
 		break;
 	}
 	case SC_STAT_CHANGE: {
@@ -434,8 +465,7 @@ void client_main()
 			}
 		}
 	}
-	//avatar.draw();
-	//back.draw();
+
 	player.draw();
 	for (auto& pl : players) pl.second.draw();
 	sf::Text text;
@@ -443,6 +473,24 @@ void client_main()
 	char buf[100];
 	sprintf_s(buf, "(%d, %d)", player.m_x, player.m_y);
 	text.setString(buf);
+	g_window->draw(text);
+
+	g_window->draw(*rectangle);
+	text.setFont(g_font);
+	text.setCharacterSize(15);
+	int now_print_chat = 0;
+	for (int i = 10; i > 0; --i) {
+		int tmp = (i + act_chat) % 10;
+		if (msg_data[tmp].active != true) continue;
+		
+		sprintf_s(buf, "[%s]%s", msg_data[tmp].name, msg_data[tmp].msg);
+		text.setString(buf);
+		text.setPosition(WINDOW_WIDTH - TILE_WIDTH * (SCREEN_WIDTH / 2), WINDOW_HEIGHT - (now_print_chat * 20) - 40);
+		g_window->draw(text);
+		now_print_chat++;
+	}
+	text.setString(my_msg);
+	text.setPosition(WINDOW_WIDTH - TILE_WIDTH * (SCREEN_WIDTH / 2), WINDOW_HEIGHT - 20);
 	g_window->draw(text);
 }
 
@@ -509,6 +557,8 @@ int main()
 	sf::RenderWindow window(sf::VideoMode(WINDOW_WIDTH, WINDOW_HEIGHT), "2D CLIENT");
 	g_window = &window;
 
+	
+
 	while (window.isOpen())
 	{
 		sf::Event event;
@@ -518,6 +568,7 @@ int main()
 				window.close();
 			if (event.type == sf::Event::KeyPressed) {
 				int direction = -1;
+				
 				switch (event.key.code) {
 				case sf::Keyboard::Left:
 					direction = 2;
@@ -535,36 +586,79 @@ int main()
 					direction = 1;
 					player.set_direction(direction);
 					break;
-				case sf::Keyboard::A: { //ATTACK
-					CS_ATTACK_PACKET p;
-					p.size = sizeof(p);
-					p.type = CS_ATTACK;
-					p.atk_type = 0;
-					send_packet(&p);
-					printf("ATK\n");
-					break;
-				}
-				case sf::Keyboard::S: { //ATTACK
-					CS_ATTACK_PACKET p;
-					p.size = sizeof(p);
-					p.type = CS_ATTACK;
-					p.atk_type = 1;
-					send_packet(&p);
-					printf("ATK_SKILL\n");
-					break;
-				}
-				case sf::Keyboard::T: {//Teleport
-					CS_TELEPORT_PACKET p;
-					p.size = sizeof(p);
-					p.type = CS_TELEPORT;
-					p.direction = player.get_direction();
-					send_packet(&p);
-					break;
-				}
-				case sf::Keyboard::Escape:
+				case sf::Keyboard::Escape: {
 					window.close();
 					break;
 				}
+				case sf::Keyboard::Slash: {
+					is_chat_input = !is_chat_input;
+					break;
+				}
+				}
+
+				if (is_chat_input) {
+					if (event.key.code == sf::Keyboard::Return) {
+						
+						CS_CHAT_PACKET p;
+						p.size = sizeof(p);
+						p.type = CS_CHAT;
+						my_msg[msg_count] = '\0';
+						sprintf_s(p.mess, "%s", my_msg);
+						send_packet(&p);
+						
+						memset(my_msg, '\0', CHAT_SIZE);
+
+						msg_count = 0;
+						continue;
+					}
+
+					if (event.key.code == sf::Keyboard::BackSpace) {
+						if (msg_count <= 0) {
+							my_msg[0] = '\0';
+							continue;
+						}
+						my_msg[msg_count--] = '\0';
+						continue;
+					}
+
+					if (event.key.code < 0 && event.key.code >('Z' - 'A')) continue;
+					if (msg_count > CHAT_SIZE - 2) continue;
+
+					my_msg[msg_count++] = 'A' + event.key.code;
+
+				}
+				else {
+					switch (event.key.code) {
+					case sf::Keyboard::A: { //ATTACK
+						CS_ATTACK_PACKET p;
+						p.size = sizeof(p);
+						p.type = CS_ATTACK;
+						p.atk_type = 0;
+						send_packet(&p);
+						printf("ATK\n");
+						break;
+					}
+					case sf::Keyboard::S: { //ATTACK
+						CS_ATTACK_PACKET p;
+						p.size = sizeof(p);
+						p.type = CS_ATTACK;
+						p.atk_type = 1;
+						send_packet(&p);
+						printf("ATK_SKILL\n");
+						break;
+					}
+					case sf::Keyboard::T: {//Teleport
+						CS_TELEPORT_PACKET p;
+						p.size = sizeof(p);
+						p.type = CS_TELEPORT;
+						p.direction = player.get_direction();
+						send_packet(&p);
+						break;
+					}
+					}
+				}
+				
+
 				if (-1 != direction) {
 					CS_MOVE_PACKET p;
 					p.size = sizeof(p);
