@@ -16,8 +16,8 @@ using namespace std;
 
 sf::TcpSocket s_socket;
 
-constexpr auto SCREEN_WIDTH = 16;
-constexpr auto SCREEN_HEIGHT = 16;
+constexpr auto SCREEN_WIDTH = 20;
+constexpr auto SCREEN_HEIGHT = 20;
 
 constexpr auto TILE_WIDTH = 48;
 constexpr auto WINDOW_WIDTH = SCREEN_WIDTH * TILE_WIDTH;   // size of window
@@ -138,9 +138,14 @@ public:
 	
 
 	PLAYER() {
+		exp = 0;
+		level = 0;
 		m_showing = false;
 	}
 	PLAYER(sf::Texture& t) {
+		exp = 0;
+		level = 0;
+
 		m_showing = false;
 	
 		set_name("NONAME");
@@ -304,7 +309,12 @@ void ProcessPacket(char* ptr)
 	{
 		SC_LOGIN_INFO_PACKET* packet = reinterpret_cast<SC_LOGIN_INFO_PACKET*>(ptr);
 		g_myid = packet->id;
-		avatar.id = g_myid;
+
+		player.id = g_myid;
+		player.exp = packet->exp;
+		player.level = packet->level;
+		player._max_hp = packet->max_hp;
+		player._hp = packet->hp;
 		player.move(packet->x, packet->y);
 		g_left_x = packet->x - SCREEN_WIDTH / 2;
 		g_top_y = packet->y - SCREEN_HEIGHT / 2;
@@ -379,12 +389,14 @@ void ProcessPacket(char* ptr)
 		int other_id = my_packet->id;
 		if (other_id == g_myid) {
 			player.hide();
-			printf("YOU DIE : %d", my_packet->exp);
+			printf("YOU DIE : %d", my_packet->get_exp);
 		}
 		else {
+			printf("GET EXP : %d", my_packet->get_exp);
 			players.erase(other_id);
 		}
-		printf("GET EXP : %d", my_packet->exp);
+		player.exp = my_packet->exp;
+		player.level = my_packet->level;
 		break;
 	}
 	case SC_CHAT:
@@ -560,6 +572,11 @@ void client_main()
 	text.setString(buf);
 	g_window->draw(text);
 
+	sprintf_s(buf, "LEVEL : %d / EXP : %d", player.level, player.exp);
+	text.setString(buf);
+	text.setPosition(WINDOW_WIDTH - TILE_WIDTH * (SCREEN_WIDTH / 2), 0);
+	g_window->draw(text);
+
 	g_window->draw(*rectangle);
 	text.setFont(g_font);
 	text.setCharacterSize(15);
@@ -578,6 +595,9 @@ void client_main()
 	text.setPosition(WINDOW_WIDTH - TILE_WIDTH * (SCREEN_WIDTH / 2), WINDOW_HEIGHT - 20);
 	g_window->draw(text);
 
+
+
+
 	text.setCharacterSize(20);
 	if (party_num != -1) {
 		int counter = 0;
@@ -586,6 +606,7 @@ void client_main()
 				sprintf_s(buf, "[%s]%d/%d", party_data[i].name, party_data[i].hp, party_data[i].max_hp);
 				text.setString(buf);
 				text.setPosition(0, WINDOW_HEIGHT + counter*23 - (WINDOW_HEIGHT /2));
+				g_window->draw(text);
 				counter++;
 			}
 		}

@@ -19,9 +19,9 @@
 #pragma comment(lib, "lua54.lib")
 using namespace std;
 
-constexpr int VIEW_RANGE = 5;
+constexpr int VIEW_RANGE = 10;
 constexpr int ATK_RANGE = 2;
-enum EVENT_TYPE { EV_RANDOM_MOVE, EV_RESET_NPC };
+enum EVENT_TYPE { EV_RANDOM_MOVE, EV_RESET_NPC, EV_PL_HEAL };
 
 
 
@@ -39,7 +39,7 @@ struct TIMER_EVENT {
 };
 concurrency::concurrent_priority_queue<TIMER_EVENT> timer_queue;
 
-enum COMP_TYPE { OP_ACCEPT, OP_RECV, OP_SEND, OP_NPC_MOVE, OP_AI_HELLO,OP_NPC_RESET };
+enum COMP_TYPE { OP_ACCEPT, OP_RECV, OP_SEND, OP_NPC_MOVE, OP_AI_HELLO,OP_NPC_RESET,OP_PL_HEAL };
 class OVER_EXP {
 public:
 	WSAOVERLAPPED _over;
@@ -87,6 +87,9 @@ public:
 	int _hp;
 	int _max_hp;
 
+	int _exp;
+	int _level;
+
 	int _target_id;
 	int _party_id;
 
@@ -105,6 +108,8 @@ public:
 		_max_hp = 100;
 		_target_id = -1;
 		_party_id = -1;
+		_exp = 0;
+		_level = 0;
 	}
 
 	~SESSION() {}
@@ -134,6 +139,8 @@ public:
 		p.y = y;
 		p.hp = _hp;
 		p.max_hp = _max_hp;
+		p.exp = _exp;
+		p.level = _level;
 		do_send(&p);
 	}
 	void send_move_packet(int c_id);
@@ -294,11 +301,16 @@ void SESSION::send_die_packet(int c_id, int exp)
 		return;
 	}
 	_vl.unlock();
+
+	_exp += exp;
+	_level = _exp / 100;
 	SC_DIE_OBJECT_PACKET p;
 	p.id = c_id;
 	p.size = sizeof(p);
 	p.type = SC_DIE_OBJECT;
-	p.exp = exp;
+	p.exp = _exp;
+	p.level = _level;
+	p.get_exp = exp;
 	do_send(&p);
 
 }
@@ -528,7 +540,7 @@ void process_packet(int c_id, char* packet)
 						}
 					}
 
-					TIMER_EVENT ev{ pa, chrono::system_clock::now() + 10s, EV_RESET_NPC, 0 };
+					TIMER_EVENT ev{ pa, chrono::system_clock::now() + 30s, EV_RESET_NPC, 0 };
 					timer_queue.push(ev);
 				}
 				else {//아직 사륨
@@ -685,7 +697,6 @@ void process_packet(int c_id, char* packet)
 		break;
 	}
 	}
-	//printf("PACKET type [%d]\n", packet[2]);
 }
 
 void disconnect(int c_id)
@@ -807,10 +818,14 @@ void do_npc_follow(int npc_id) {
 	if (can_attack_npc(npc_id, npc._target_id)) {//공격 가능?
 		
 		if (clients[npc._target_id]._hp <= 0) {
-			clients[npc._target_id].send_die_packet(npc._target_id, -100);
+			clients[npc._target_id].send_die_packet(npc._target_id, clients[npc._target_id]._exp / 2);
 			npc._target_id = -1;
 		}
 		else {
+			if (clients[npc._target_id]._hp == clients[npc._target_id]._max_hp) {
+				TIMER_EVENT ev{ npc._target_id, chrono::system_clock::now() + 5s, EV_PL_HEAL, 0 };
+				timer_queue.push(ev);
+			}
 			clients[npc._target_id]._hp -= 10;
 			printf("HIT PL > HP :%d\n", clients[npc._target_id]._hp);
 			clients[npc._target_id].send_move_packet(npc._target_id);
@@ -875,13 +890,9 @@ void do_npc_follow(int npc_id) {
 }
 
 void reset_NPC(int id) {
-	clients[id].x = rand() % W_WIDTH;
-	clients[id].y = rand() % W_HEIGHT;
+	clients[id].x = clients[id]._base_x;
+	clients[id].y = clients[id]._base_y;
 
-	while (mapData[clients[id].y][clients[id].x] != 0) {
-		clients[id].x = rand() % W_WIDTH;
-		clients[id].y = rand() % W_HEIGHT;
-	}
 	clients[id]._ll.lock();
 	clients[id]._state = ST_INGAME;
 	clients[id]._ll.unlock();
@@ -1008,6 +1019,18 @@ void worker_thread(HANDLE h_iocp)
 			delete ex_over;
 			break;
 		}
+		case OP_PL_HEAL: {
+			if (clients[key]._hp + 10 <= clients[key]._max_hp) {
+				clients[key]._hp += 10;
+				TIMER_EVENT ev{ key, chrono::system_clock::now() + 5s, EV_PL_HEAL, 0 };
+				timer_queue.push(ev);
+			}
+			else {
+				clients[key]._hp = clients[key]._max_hp;
+			}
+			clients[key].send_move_packet(key);
+			break;
+		}
 		}
 	}
 }
@@ -1088,9 +1111,8 @@ void do_timer()
 		auto current_time = chrono::system_clock::now();
 		if (true == timer_queue.try_pop(ev)) {
 			if (ev.wakeup_time > current_time) {
-				timer_queue.push(ev);		// 최적화 필요
-				// timer_queue에 다시 넣지 않고 처리해야 한다.
-				this_thread::sleep_for(1ms);  // 실행시간이 아직 안되었으므로 잠시 대기
+				timer_queue.push(ev);		
+				this_thread::sleep_for(1ms);  
 				continue;
 			}
 			switch (ev.event_id) {
@@ -1104,12 +1126,19 @@ void do_timer()
 				OVER_EXP* ov = new OVER_EXP;
 				ov->_comp_type = OP_NPC_RESET;
 				PostQueuedCompletionStatus(h_iocp, 1, ev.obj_id, &ov->_over);
+				break;
+			}
+			case EV_PL_HEAL: {
+				OVER_EXP* ov = new OVER_EXP;
+				ov->_comp_type = OP_PL_HEAL;
+				PostQueuedCompletionStatus(h_iocp, 1, ev.obj_id, &ov->_over);
+				break;
 			}
 			}
 			
-			continue;		// 즉시 다음 작업 꺼내기
+			continue;
 		}
-		this_thread::sleep_for(1ms);   // timer_queue가 비어 있으니 잠시 기다렸다가 다시 시작
+		this_thread::sleep_for(1ms);
 	}
 }
 

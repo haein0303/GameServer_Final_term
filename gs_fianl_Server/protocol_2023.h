@@ -162,6 +162,8 @@ struct SC_DIE_OBJECT_PACKET {
 	char	type;
 	int		id;
 	int		exp;
+	int		level;
+	int		get_exp;
 };
 
 struct SC_P_CREATE_PACKET {
