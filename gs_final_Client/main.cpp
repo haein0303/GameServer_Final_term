@@ -36,11 +36,15 @@ protected:
 
 	sf::Text m_name;
 	sf::Text m_chat;
+	sf::Text m_hp;
 	chrono::system_clock::time_point m_mess_end_time;
 public:
 	int id;
 	int m_x, m_y;
 	char name[NAME_SIZE];
+	int _hp = 100;
+	int _max_hp = 100;
+
 	OBJECT(sf::Texture& t, int x, int y, int x2, int y2) {
 		m_showing = false;
 		m_sprite.setTexture(t);
@@ -90,6 +94,8 @@ public:
 			m_chat.setPosition(rx + 32 - size.width / 2, ry - 10);
 			g_window->draw(m_chat);
 		}
+		m_hp.setPosition(rx + 32 - size.width / 2, ry - 30);
+		g_window->draw(m_hp);
 	}
 	void set_name(const char str[]) {
 		m_name.setFont(g_font);
@@ -106,6 +112,16 @@ public:
 		m_chat.setStyle(sf::Text::Bold);
 		m_mess_end_time = chrono::system_clock::now() + chrono::seconds(3);
 	}
+
+	void set_hp(int hp) {
+		_hp = hp;
+		char txt[20];
+		sprintf_s(txt, "%d/%d", _hp , _max_hp);
+		m_hp.setFont(g_font);
+		m_hp.setString(txt);
+		m_hp.setFillColor(sf::Color(255, 255, 255));
+		m_hp.setStyle(sf::Text::Bold);
+	}
 };
 
 class PLAYER :public OBJECT {
@@ -114,7 +130,8 @@ private:
 	int _direction = 0;
 	sf::Sprite m_sprite[4][3];
 public:
-	
+	int		exp;
+	int		level;
 	
 
 	PLAYER() {
@@ -151,6 +168,8 @@ public:
 		}
 
 		m_mess_end_time = chrono::system_clock::now();
+
+
 	}
 
 	void set_direction(const int& dir) {
@@ -177,6 +196,8 @@ public:
 			m_chat.setPosition(rx + 32 - size.width / 2, ry - 10);
 			g_window->draw(m_chat);
 		}
+		m_hp.setPosition(rx + 32 - size.width / 2, ry - 30);
+		g_window->draw(m_hp);
 	}
 
 };
@@ -244,6 +265,7 @@ void ProcessPacket(char* ptr)
 		player.move(packet->x, packet->y);
 		g_left_x = packet->x - SCREEN_WIDTH / 2;
 		g_top_y = packet->y - SCREEN_HEIGHT / 2;
+		player.set_hp(packet->hp);
 		player.show();
 		avatar.show();
 	}
@@ -265,6 +287,7 @@ void ProcessPacket(char* ptr)
 			players[id].id = id;
 			players[id].move(my_packet->x, my_packet->y);
 			players[id].set_name(my_packet->name);
+			players[id].set_hp(my_packet->hp);
 			players[id].show();
 		}
 		else {
@@ -272,6 +295,7 @@ void ProcessPacket(char* ptr)
 			players[id].id = id;
 			players[id].move(my_packet->x, my_packet->y);
 			players[id].set_name(my_packet->name);
+			players[id].set_hp(my_packet->hp);
 			players[id].show();
 		}
 		break;
@@ -281,7 +305,7 @@ void ProcessPacket(char* ptr)
 		SC_MOVE_OBJECT_PACKET* my_packet = reinterpret_cast<SC_MOVE_OBJECT_PACKET*>(ptr);
 		int other_id = my_packet->id;
 		if (other_id == g_myid) {
-			avatar.move(my_packet->x, my_packet->y);
+			//avatar.move(my_packet->x, my_packet->y);
 
 			player.move(my_packet->x, my_packet->y);
 			g_left_x = my_packet->x - SCREEN_WIDTH / 2;
@@ -289,6 +313,7 @@ void ProcessPacket(char* ptr)
 		}
 		else {
 			players[other_id].move(my_packet->x, my_packet->y);
+			players[other_id].set_hp(my_packet->hp);
 		}
 		break;
 	}
@@ -318,6 +343,16 @@ void ProcessPacket(char* ptr)
 
 		break;
 	}
+	case SC_STAT_CHANGE: {
+		SC_STAT_CHANGE_PACKET* my_packet = reinterpret_cast<SC_STAT_CHANGE_PACKET*>(ptr);
+		player._hp = my_packet->hp;
+		player._max_hp = my_packet->max_hp;
+		player.exp = my_packet->exp;
+		player.level = my_packet->level;
+
+		break;
+	}
+
 	default:
 		printf("Unknown PACKET type [%d]\n", ptr[2]);
 	}
@@ -332,7 +367,6 @@ void process_data(char* net_buf, size_t io_byte)
 
 	while (0 != io_byte) {
 		if (0 == in_packet_size) in_packet_size = *reinterpret_cast<short*>(ptr);
-		cout << "in_packet_size : " << in_packet_size << endl;
 		if (io_byte + saved_packet_size >= in_packet_size) {
 			memcpy(packet_buffer + saved_packet_size, ptr, in_packet_size - saved_packet_size);
 			ProcessPacket(packet_buffer);
@@ -416,10 +450,12 @@ int main()
 		exit(-1);
 	}
 
+
 	client_initialize();
 	CS_LOGIN_PACKET p;
 	p.size = sizeof(p);
 	p.type = CS_LOGIN;
+	
 
 	string player_name{ "P" };
 	player_name += to_string(GetCurrentProcessId());
@@ -462,6 +498,7 @@ int main()
 					p.size = sizeof(p);
 					p.type = CS_ATTACK;
 					send_packet(&p);
+					printf("ATK\n");
 					break;
 				}
 				case sf::Keyboard::T: {//Teleport

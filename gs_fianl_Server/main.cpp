@@ -17,7 +17,7 @@
 using namespace std;
 
 constexpr int VIEW_RANGE = 5;
-
+constexpr int ATK_RANGE = 2;
 enum EVENT_TYPE { EV_RANDOM_MOVE };
 
 struct TIMER_EVENT {
@@ -65,16 +65,21 @@ public:
 	mutex _s_lock;
 	S_STATE _state;
 	atomic_bool	_is_active;		// 주위에 플레이어가 있는가?
-	int _id;
 	SOCKET _socket;
-	short	x, y;
-	char	_name[NAME_SIZE];
 	int		_prev_remain;
 	unordered_set <int> _view_list;
 	mutex	_vl;
 	int		last_move_time;
 	lua_State* _L;
 	mutex	_ll;
+
+	//플레이어 정보
+	int _id;
+	short	x, y;
+	char	_name[NAME_SIZE];
+	int _hp;
+	int _max_hp;
+
 public:
 	SESSION()
 	{
@@ -84,6 +89,8 @@ public:
 		_name[0] = 0;
 		_state = ST_FREE;
 		_prev_remain = 0;
+		_hp = 100;
+		_max_hp = 100;
 	}
 
 	~SESSION() {}
@@ -111,6 +118,8 @@ public:
 		p.type = SC_LOGIN_INFO;
 		p.x = x;
 		p.y = y;
+		p.hp = _hp;
+		p.max_hp = _max_hp;
 		do_send(&p);
 	}
 	void send_move_packet(int c_id);
@@ -154,6 +163,11 @@ bool can_see(int from, int to)
 {
 	if (abs(clients[from].x - clients[to].x) > VIEW_RANGE) return false;
 	return abs(clients[from].y - clients[to].y) <= VIEW_RANGE;
+}
+
+bool can_attack(int from, int to) {
+	if (abs(clients[from].x - clients[to].x) > ATK_RANGE) return false;
+	return abs(clients[from].y - clients[to].y) <= ATK_RANGE;
 }
 
 void SESSION::send_move_packet(int c_id)
@@ -303,6 +317,30 @@ void process_packet(int c_id, char* packet)
 		break;
 	}
 	case CS_ATTACK: {
+		//보이는 애들만 검사하자
+
+		unordered_set<int> near_list;
+		clients[c_id]._vl.lock();
+		near_list = clients[c_id]._view_list;
+		clients[c_id]._vl.unlock();
+		for (int p : clients[c_id]._view_list) {
+			//공격 가능하니?
+			if (can_attack(c_id, p)) {
+				//피통 빼주고
+				clients[p]._hp -= 10;
+				printf("(ATK) player[%d]->NPC[%d] : hp(%d)\n", c_id, p, clients[p]._hp);
+				//피통 빼진거 전송하자
+				//근데 무브 패킷을 재활용해서하자
+
+				for (int pl : clients[p]._view_list) {
+					if (is_pc(pl)) {
+						clients[pl].send_move_packet(p);
+					}
+				}
+			}
+
+		}
+
 		break;
 	}
 	case CS_TELEPORT: {
@@ -381,7 +419,7 @@ void process_packet(int c_id, char* packet)
 		break;
 	}
 	}
-	printf("Unknown PACKET type [%d]\n", packet[2]);
+	//printf("PACKET type [%d]\n", packet[2]);
 }
 
 void disconnect(int c_id)
@@ -516,7 +554,7 @@ void worker_thread(HANDLE h_iocp)
 			char* p = ex_over->_send_buf;
 			while (remain_data > 0) {
 				int packet_size = *reinterpret_cast<unsigned short*>(p);
-				cout << "packet_size : " << packet_size << endl;
+				//cout << "packet_size : " << packet_size << endl;
 				if (packet_size <= remain_data) {
 					process_packet(static_cast<int>(key), p);
 					p = p + packet_size;

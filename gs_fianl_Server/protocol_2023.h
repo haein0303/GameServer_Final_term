@@ -78,6 +78,7 @@ struct SC_ADD_OBJECT_PACKET {
 	char	type;
 	int		id;
 	short	x, y;
+	int		hp;
 	char	name[NAME_SIZE];
 };
 
@@ -92,6 +93,7 @@ struct SC_MOVE_OBJECT_PACKET {
 	char	type;
 	int		id;
 	short	x, y;
+	int		hp;
 	unsigned int move_time;
 };
 
