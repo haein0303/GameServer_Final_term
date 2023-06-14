@@ -409,13 +409,23 @@ void ProcessPacket(char* ptr)
 	case SC_P_CREATE: {
 		SC_P_CREATE_PACKET* my_packet = reinterpret_cast<SC_P_CREATE_PACKET*>(ptr);
 		party_num = my_packet->p_id;
+		printf("PARTY : %d\n", party_num);
 		print_chat("CREAT PARTY : GOOD", "SYSTEM");
 		break;
 	}
 	case SC_P_ENTER: {
 		SC_P_ENTER_PACKET* my_packet = reinterpret_cast<SC_P_ENTER_PACKET*>(ptr);
 		party_num = my_packet->p_id;
-		print_chat("JOIN PARTY : GOOD", "SYSTEM");
+		if (party_num == -1) {
+			print_chat("JOIN PARTY : BAD", "SYSTEM");
+		}
+		else if (party_num == -2) {
+			print_chat("JOIN PARTY : PARTY IS MAX", "SYSTEM");
+		}
+		else {
+			print_chat("JOIN PARTY : GOOD", "SYSTEM");
+		}
+		
 		break;
 	}
 	case SC_P_JOIN: {
@@ -436,22 +446,31 @@ void ProcessPacket(char* ptr)
 	}
 	case SC_P_EXIT: {
 		SC_P_EXIT_PACKET* my_packet = reinterpret_cast<SC_P_EXIT_PACKET*>(ptr);
-		for (int i = 0; i < MAX_PARTY; ++i) {
-			if (party_data[i].id == my_packet->id) {
-				party_data[i].is_active = false;
-				party_data[i].id = 0;
-				party_data[i].hp = 0;
-				party_data[i].max_hp = 0;
+		if (my_packet->id == g_myid) {
+			party_num = -1;
+			char tmp[100];
+			sprintf_s(tmp, "EXIT PARTY : GOOD");
+			print_chat(tmp, "SYSTEM");
+		}
+		else {
+			for (int i = 0; i < MAX_PARTY; ++i) {
+				if (party_data[i].id == my_packet->id) {
+					party_data[i].is_active = false;
+					party_data[i].id = 0;
+					party_data[i].hp = 0;
+					party_data[i].max_hp = 0;
 
-				char tmp[100];
-				sprintf_s(tmp, "EXIT PARTY [%s]", party_data[i].name);
-				print_chat(tmp, "SYSTEM");
+					char tmp[100];
+					sprintf_s(tmp, "EXIT PARTY [%s]", party_data[i].name);
+					print_chat(tmp, "SYSTEM");
 
-				memset(party_data[i].name, '\0', NAME_SIZE);
+					memset(party_data[i].name, '\0', NAME_SIZE);
 
-				break;
+					break;
+				}
 			}
 		}
+		
 		break;
 	}
 	case SC_P_STAT: {
@@ -564,7 +583,7 @@ void client_main()
 			if (party_data[i].is_active == true) {
 				sprintf_s(buf, "[%s]%d/%d", party_data[i].name, party_data[i].hp, party_data[i].max_hp);
 				text.setString(buf);
-				text.setPosition(WINDOW_WIDTH, WINDOW_HEIGHT + counter*23 - (WINDOW_HEIGHT /2));
+				text.setPosition(0, WINDOW_HEIGHT + counter*23 - (WINDOW_HEIGHT /2));
 				counter++;
 			}
 		}

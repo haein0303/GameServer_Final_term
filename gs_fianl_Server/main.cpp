@@ -6,7 +6,7 @@
 #include <vector>
 #include <mutex>
 #include <unordered_set>
-#include <unordered_map>
+#include <concurrent_unordered_map.h>
 #include <concurrent_priority_queue.h>
 #include <fstream>
 #include <string>
@@ -88,6 +88,7 @@ public:
 	int _max_hp;
 
 	int _target_id;
+	int _party_id;
 
 public:
 	SESSION()
@@ -101,6 +102,7 @@ public:
 		_hp = 100;
 		_max_hp = 100;
 		_target_id = -1;
+		_party_id = -1;
 	}
 
 	~SESSION() {}
@@ -154,15 +156,22 @@ OVER_EXP g_a_over;
 class PARTY {
 public:
 	int _p_num;
-	int _player_id[MAX_PARTY] = {-1};
+	int _player_id[MAX_PARTY];
 	int _player_count;
 public:
 	PARTY() {
 		_player_count = 0;
 		_p_num = -1;
+		for (int i = 0; i < MAX_PARTY; ++i) {
+			_player_id[i] = -1;
+		}
 	}
 	PARTY(int p_num) {
+		_player_count = 0;
 		_p_num = p_num;
+		for (int i = 0; i < MAX_PARTY; ++i) {
+			_player_id[i] = -1;
+		}
 	}
 	//조인 가능하면 1, 아니면 0
 	int join(int id) {
@@ -174,7 +183,7 @@ public:
 		}
 		return 0;
 	}
-
+	//성공하면 1, 아니면 0
 	int exit(int id) {
 		for (int i = 0; i < MAX_PARTY; ++i) {
 			if (_player_id[i] == id) {
@@ -187,7 +196,7 @@ public:
 };
 
 unsigned int party_counter = 0;
-std::unordered_map<unsigned int, PARTY> party_map;
+concurrency::concurrent_unordered_map<unsigned int, PARTY> party_map;
 
 
 bool is_pc(int object_id)
@@ -310,6 +319,7 @@ void SESSION::send_p_enter_packet(int c_id, int p_num)
 	p.type = SC_P_ENTER;
 	p.p_id = p_num;
 	do_send(&p);
+	_party_id = p_num;
 }
 
 void SESSION::send_p_stat_packet(int c_id)
@@ -341,6 +351,7 @@ void SESSION::send_p_exit_packet(int c_id)
 	p.size = sizeof(SC_P_EXIT_PACKET);
 	p.type = SC_P_EXIT;
 	do_send(&p);
+	_party_id = -1;
 }
 
 int get_new_client_id()
@@ -619,7 +630,56 @@ void process_packet(int c_id, char* packet)
 		}
 		break;
 	}
-	case CS_P_CREATE: {//todo : 03:17 여기서부터 작업해야됨. 클라이언트에서 파티 접속 요청 보내면, 만들어주기
+	case CS_P_CREATE: {
+		cout << "CS_P_CREATE" << endl;
+		party_map.insert(make_pair(party_counter, (party_counter)));
+		clients[c_id].send_p_create_packet(c_id, party_counter);
+
+		auto a = party_map.find(party_counter);
+		if (a != party_map.end()) {
+			PARTY& pd = a->second;
+			pd.join(c_id);
+		}
+		clients[c_id].send_p_join_packet(c_id);
+		party_counter++;
+		break;
+	}
+	case CS_P_JOIN: {
+		cout << "CS_P_JOIN" << endl;
+		CS_P_JOIN_PACKET* p = reinterpret_cast<CS_P_JOIN_PACKET*>(packet);
+		auto a = party_map.find(p->p_num);
+		if (a != party_map.end()) {
+			PARTY& pd = a->second;
+			//파티 가입 정보 전달
+			
+			if (pd.join(c_id) == 0) {
+				clients[c_id].send_p_enter_packet(c_id, -2);
+				break;
+			}
+			clients[c_id].send_p_enter_packet(c_id, p->p_num);
+			//기존 파티원 정보 전달
+			for (int i = 0; i < MAX_PARTY; ++i) {
+				if (pd._player_id[i] == -1) continue;
+				if (pd._player_id[i] != c_id) clients[c_id].send_p_join_packet(pd._player_id[i]);
+				clients[pd._player_id[i]].send_p_join_packet(c_id);
+			}			
+		}
+		else {
+			clients[c_id].send_p_enter_packet(c_id, -1);
+		}
+		break;
+	}
+	case CS_P_EXIT: {
+		auto a = party_map.find(clients[c_id]._party_id);
+		PARTY& pd = a->second;
+		if (pd.exit(c_id) == 1) {
+			clients[c_id]._party_id = -1;
+		}
+		clients[c_id].send_p_exit_packet(c_id);
+		for (int i = 0; i < MAX_PARTY; ++i) {
+			if (pd._player_id[i] == -1) continue;			
+			clients[pd._player_id[i]].send_p_exit_packet(c_id);
+		}
 		break;
 	}
 	}
