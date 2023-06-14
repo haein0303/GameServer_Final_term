@@ -20,7 +20,7 @@ using namespace std;
 
 constexpr int VIEW_RANGE = 5;
 constexpr int ATK_RANGE = 2;
-enum EVENT_TYPE { EV_RANDOM_MOVE };
+enum EVENT_TYPE { EV_RANDOM_MOVE, EV_RESET_NPC };
 
 
 
@@ -38,7 +38,7 @@ struct TIMER_EVENT {
 };
 concurrency::concurrent_priority_queue<TIMER_EVENT> timer_queue;
 
-enum COMP_TYPE { OP_ACCEPT, OP_RECV, OP_SEND, OP_NPC_MOVE, OP_AI_HELLO };
+enum COMP_TYPE { OP_ACCEPT, OP_RECV, OP_SEND, OP_NPC_MOVE, OP_AI_HELLO,OP_NPC_RESET };
 class OVER_EXP {
 public:
 	WSAOVERLAPPED _over;
@@ -134,22 +134,9 @@ public:
 	void send_move_packet(int c_id);
 	void send_add_player_packet(int c_id);
 	void send_chat_packet(int c_id, const char* mess);
-	void send_remove_player_packet(int c_id)
-	{
-		_vl.lock();
-		if (_view_list.count(c_id))
-			_view_list.erase(c_id);
-		else {
-			_vl.unlock();
-			return;
-		}
-		_vl.unlock();
-		SC_REMOVE_OBJECT_PACKET p;
-		p.id = c_id;
-		p.size = sizeof(p);
-		p.type = SC_REMOVE_OBJECT;
-		do_send(&p);
-	}
+	void send_remove_player_packet(int c_id);
+
+	void send_die_packet(int c_id, int exp);
 };
 
 HANDLE h_iocp;
@@ -221,6 +208,42 @@ void SESSION::send_chat_packet(int p_id, const char* mess)
 	packet.type = SC_CHAT;
 	strcpy_s(packet.mess, mess);
 	do_send(&packet);
+}
+
+void SESSION::send_remove_player_packet(int c_id)
+{
+	_vl.lock();
+	if (_view_list.count(c_id))
+		_view_list.erase(c_id);
+	else {
+		_vl.unlock();
+		return;
+	}
+	_vl.unlock();
+	SC_REMOVE_OBJECT_PACKET p;
+	p.id = c_id;
+	p.size = sizeof(p);
+	p.type = SC_REMOVE_OBJECT;
+	do_send(&p);
+}
+
+void SESSION::send_die_packet(int c_id, int exp)
+{
+	_vl.lock();
+	if (_view_list.count(c_id))
+		_view_list.erase(c_id);
+	else {
+		_vl.unlock();
+		return;
+	}
+	_vl.unlock();
+	SC_DIE_OBJECT_PACKET p;
+	p.id = c_id;
+	p.size = sizeof(p);
+	p.type = SC_DIE_OBJECT;
+	p.exp = exp;
+	do_send(&p);
+
 }
 
 int get_new_client_id()
@@ -354,7 +377,8 @@ void process_packet(int c_id, char* packet)
 		clients[c_id]._vl.lock();
 		near_list = clients[c_id]._view_list;
 		clients[c_id]._vl.unlock();
-		for (int pa : clients[c_id]._view_list) {
+		for (int pa : near_list) {
+			if (clients[pa]._state != ST_INGAME) continue;
 			//공격 가능하니?
 			if (can_attack(c_id, pa)) {
 				//피통 빼주고
@@ -378,11 +402,26 @@ void process_packet(int c_id, char* packet)
 				l_list = clients[pa]._view_list;
 				clients[pa]._vl.unlock();
 
-				if (clients[pa]._hp <= 0) {
+				if (clients[pa]._hp <= 0) { //NPC 쥬금
 					//나중에 재활용할 수 있으니깐
 					clients[pa]._target_id = -1;
+
+					clients[pa]._ll.lock();
+					clients[pa]._state = ST_ALLOC;
+					clients[pa]._ll.unlock();
+
+					clients[c_id].send_die_packet(pa, 100);
+					
+					for (int pl : l_list) {
+						if (is_pc(pl)) {
+							clients[pl].send_remove_player_packet(pa);
+						}
+					}
+
+					TIMER_EVENT ev{ pa, chrono::system_clock::now() + 10s, EV_RESET_NPC, 0 };
+					timer_queue.push(ev);
 				}
-				else {
+				else {//아직 사륨
 					//근데 무브 패킷을 재활용해서 하자
 					clients[c_id].send_move_packet(pa);
 					clients[pa]._target_id = c_id;
@@ -576,6 +615,7 @@ void do_npc_follow(int npc_id) {
 
 	//혹시 접속 끊어버리면 그냥 리셋시켜부러
 	if (clients[npc._target_id]._state != ST_INGAME) {
+		printf("CL DISCONNECT and RESET TARGET DATA\n");
 		npc._target_id = -1;
 		return;
 	}
@@ -593,27 +633,43 @@ void do_npc_follow(int npc_id) {
 
 	int t_x = clients[npc._target_id].x;
 	int t_y = clients[npc._target_id].y;
-
-	//일단은 따라만가는 멍청한 AI란다
-	if (abs(x - t_x) > abs(y - t_y)) {
-		if ((x - t_x) < 0) {
-			if (mapData[y][x + 1] == 1) x++;
+	
+	if (can_attack_npc(npc_id, npc._target_id)) {//공격 가능?
+		
+		if (clients[npc._target_id]._hp <= 0) {
+			clients[npc._target_id].send_die_packet(npc._target_id, -100);
+			npc._target_id = -1;
 		}
 		else {
-			if (mapData[y][x - 1] == 1) x--;
+			clients[npc._target_id]._hp -= 10;
+			printf("HIT PL > HP :%d\n", clients[npc._target_id]._hp);
+			clients[npc._target_id].send_move_packet(npc._target_id);
 		}
 	}
 	else {
-		if ((y - t_y) < 0) {
-			if (mapData[y + 1][x] == 1) y++;
+		//일단은 따라만가는 멍청한 AI란다
+		if (abs(x - t_x) > abs(y - t_y)) {
+			if ((x - t_x) < 0) {
+				if (mapData[y][x + 1] == 1) x++;
+			}
+			else {
+				if (mapData[y][x - 1] == 1) x--;
+			}
 		}
 		else {
-			if (mapData[y - 1][x] == 1)	y--;
+			if ((y - t_y) < 0) {
+				if (mapData[y + 1][x] == 1) y++;
+			}
+			else {
+				if (mapData[y - 1][x] == 1)	y--;
+			}
 		}
+
+		npc.x = x;
+		npc.y = y;
 	}
+
 	
-	npc.x = x;
-	npc.y = y;
 
 	unordered_set<int> new_vl;
 	for (auto& obj : clients) {
@@ -646,6 +702,22 @@ void do_npc_follow(int npc_id) {
 			}
 		}
 	}
+}
+
+void reset_NPC(int id) {
+	clients[id].x = rand() % W_WIDTH;
+	clients[id].y = rand() % W_HEIGHT;
+
+	while (mapData[clients[id].y][clients[id].x] != 0) {
+		clients[id].x = rand() % W_WIDTH;
+		clients[id].y = rand() % W_HEIGHT;
+	}
+	clients[id]._ll.lock();
+	clients[id]._state = ST_INGAME;
+	clients[id]._ll.unlock();
+
+	TIMER_EVENT ev{ id, chrono::system_clock::now() + 1s, EV_RANDOM_MOVE, 0 };
+	timer_queue.push(ev);
 }
 
 void worker_thread(HANDLE h_iocp)
@@ -761,6 +833,11 @@ void worker_thread(HANDLE h_iocp)
 			delete ex_over;
 			break;
 		}
+		case OP_NPC_RESET: {
+			reset_NPC(key);
+			delete ex_over;
+			break;
+		}
 		}
 	}
 }
@@ -796,6 +873,8 @@ int API_SendMessage(lua_State* L)
 	clients[user_id].send_chat_packet(my_id, mess);
 	return 0;
 }
+
+
 
 void InitializeNPC()
 {
@@ -843,12 +922,19 @@ void do_timer()
 				continue;
 			}
 			switch (ev.event_id) {
-			case EV_RANDOM_MOVE:
+			case EV_RANDOM_MOVE: {
 				OVER_EXP* ov = new OVER_EXP;
 				ov->_comp_type = OP_NPC_MOVE;
 				PostQueuedCompletionStatus(h_iocp, 1, ev.obj_id, &ov->_over);
 				break;
 			}
+			case EV_RESET_NPC: {
+				OVER_EXP* ov = new OVER_EXP;
+				ov->_comp_type = OP_NPC_RESET;
+				PostQueuedCompletionStatus(h_iocp, 1, ev.obj_id, &ov->_over);
+			}
+			}
+			
 			continue;		// 즉시 다음 작업 꺼내기
 		}
 		this_thread::sleep_for(1ms);   // timer_queue가 비어 있으니 잠시 기다렸다가 다시 시작

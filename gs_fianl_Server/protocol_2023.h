@@ -4,7 +4,7 @@ constexpr int NAME_SIZE = 20;
 constexpr int CHAT_SIZE = 100;
 
 constexpr int MAX_USER = 10000;
-constexpr int MAX_NPC = 2000;
+constexpr int MAX_NPC = 20000;
 
 constexpr int W_WIDTH = 2000;
 constexpr int W_HEIGHT = 2000;
@@ -25,6 +25,7 @@ constexpr char SC_CHAT = 6;
 constexpr char SC_LOGIN_OK = 7;
 constexpr char SC_LOGIN_FAIL = 8;
 constexpr char SC_STAT_CHANGE = 9;
+constexpr char SC_DIE_OBJECT = 10;
 
 #pragma pack (push, 1)
 struct CS_LOGIN_PACKET {
@@ -123,7 +124,13 @@ struct SC_STAT_CHANGE_PACKET {
 	int		max_hp;
 	int		exp;
 	int		level;
+};
 
+struct SC_DIE_OBJECT_PACKET {
+	unsigned short size;
+	char	type;
+	int		id;
+	int		exp;
 };
 
 #pragma pack (pop)

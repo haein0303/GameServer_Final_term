@@ -307,6 +307,7 @@ void ProcessPacket(char* ptr)
 		int other_id = my_packet->id;
 		if (other_id == g_myid) {			
 			player.move(my_packet->x, my_packet->y);
+			player.set_hp(my_packet->hp);
 			g_left_x = my_packet->x - SCREEN_WIDTH / 2;
 			g_top_y = my_packet->y - SCREEN_HEIGHT / 2;
 		}
@@ -322,11 +323,25 @@ void ProcessPacket(char* ptr)
 		SC_REMOVE_OBJECT_PACKET* my_packet = reinterpret_cast<SC_REMOVE_OBJECT_PACKET*>(ptr);
 		int other_id = my_packet->id;
 		if (other_id == g_myid) {
-			avatar.hide();
+			player.hide();
 		}
 		else {
 			players.erase(other_id);
 		}
+		break;
+	}
+	case SC_DIE_OBJECT:
+	{
+		SC_DIE_OBJECT_PACKET* my_packet = reinterpret_cast<SC_DIE_OBJECT_PACKET*>(ptr);
+		int other_id = my_packet->id;
+		if (other_id == g_myid) {
+			player.hide();
+			printf("YOU DIE : %d", my_packet->exp);
+		}
+		else {
+			players.erase(other_id);
+		}
+		printf("GET EXP : %d", my_packet->exp);
 		break;
 	}
 	case SC_CHAT:
@@ -334,7 +349,7 @@ void ProcessPacket(char* ptr)
 		SC_CHAT_PACKET* my_packet = reinterpret_cast<SC_CHAT_PACKET*>(ptr);
 		int other_id = my_packet->id;
 		if (other_id == g_myid) {
-			avatar.set_chat(my_packet->mess);
+			player.set_chat(my_packet->mess);
 		}
 		else {
 			players[other_id].set_chat(my_packet->mess);
