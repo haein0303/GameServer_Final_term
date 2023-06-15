@@ -389,10 +389,22 @@ void ProcessPacket(char* ptr)
 		int other_id = my_packet->id;
 		if (other_id == g_myid) {
 			player.hide();
-			printf("YOU DIE : %d", my_packet->get_exp);
+			if (my_packet->get_exp < 0) {
+				printf("YOU DIE : %d", my_packet->get_exp);
+			}
+			else {
+				printf("[PARTY BONUS] GET EXP : %d", my_packet->get_exp);
+			}
+			
 		}
 		else {
-			printf("GET EXP : %d", my_packet->get_exp);
+			if (other_id > MAX_USER) {
+				printf("GET EXP : %d", my_packet->get_exp);
+			}
+			else {
+				printf("[PARTY BONUS] GET EXP : %d", my_packet->get_exp);
+			}
+			
 			players.erase(other_id);
 		}
 		player.exp = my_packet->exp;
@@ -491,6 +503,7 @@ void ProcessPacket(char* ptr)
 		SC_P_STAT_PACKET* my_packet = reinterpret_cast<SC_P_STAT_PACKET*>(ptr);
 		for (int i = 0; i < MAX_PARTY; ++i) {
 			if (party_data[i].id == my_packet->id) {
+				party_data[i].hp = my_packet->hp;
 			}
 		}
 	}

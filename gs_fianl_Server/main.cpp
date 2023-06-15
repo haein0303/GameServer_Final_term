@@ -19,7 +19,7 @@
 #pragma comment(lib, "lua54.lib")
 using namespace std;
 
-constexpr int VIEW_RANGE = 10;
+constexpr int VIEW_RANGE = 5;
 constexpr int ATK_RANGE = 2;
 enum EVENT_TYPE { EV_RANDOM_MOVE, EV_RESET_NPC, EV_PL_HEAL };
 
@@ -206,6 +206,7 @@ public:
 
 unsigned int party_counter = 0;
 concurrency::concurrent_unordered_map<unsigned int, PARTY> party_map;
+mutex pm_mu;
 
 
 bool is_pc(int object_id)
@@ -533,6 +534,16 @@ void process_packet(int c_id, char* packet)
 					clients[pa]._ll.unlock();
 
 					clients[c_id].send_die_packet(pa, 100);
+
+					if (clients[c_id]._party_id != -1) {
+						auto get_pair = party_map.find(clients[c_id]._party_id);
+						for (int i = 0; i < MAX_PARTY; ++i) {
+							if (get_pair->second._player_id[i] == -1) continue;
+							printf("PARTY BONUS : %d [%d]\n", get_pair->second._player_id[i], 20);
+							clients[get_pair->second._player_id[i]].send_die_packet(c_id, 20);
+						}
+						
+					}
 					
 					for (int pl : l_list) {
 						if (is_pc(pl)) {
@@ -690,9 +701,19 @@ void process_packet(int c_id, char* packet)
 			clients[c_id]._party_id = -1;
 		}
 		clients[c_id].send_p_exit_packet(c_id);
+		int counter = 0;
 		for (int i = 0; i < MAX_PARTY; ++i) {
-			if (pd._player_id[i] == -1) continue;			
+			if (pd._player_id[i] == -1) {
+				++counter;
+				continue;
+			}
 			clients[pd._player_id[i]].send_p_exit_packet(c_id);
+		}
+		int pn = a->first;
+		if (counter == MAX_PARTY) {
+			pm_mu.lock();
+			party_map.unsafe_erase(pn);
+			pm_mu.unlock();
 		}
 		break;
 	}
@@ -829,6 +850,14 @@ void do_npc_follow(int npc_id) {
 			clients[npc._target_id]._hp -= 10;
 			printf("HIT PL > HP :%d\n", clients[npc._target_id]._hp);
 			clients[npc._target_id].send_move_packet(npc._target_id);
+
+			if (clients[npc._target_id]._party_id == -1) {
+				auto get_pair = party_map.find(clients[npc._target_id]._party_id);
+				for (int i = 0; i < MAX_PARTY; ++i) {
+					if (get_pair->second._player_id[i] <= -1) continue;
+					clients[get_pair->second._player_id[i]].send_p_stat_packet(npc._target_id);
+				}
+			}
 		}
 	}
 	else {
@@ -1029,6 +1058,13 @@ void worker_thread(HANDLE h_iocp)
 				clients[key]._hp = clients[key]._max_hp;
 			}
 			clients[key].send_move_packet(key);
+			if (clients[key]._party_id == -1) {
+				auto get_pair = party_map.find(clients[key]._party_id);
+				for (int i = 0; i < MAX_PARTY; ++i) {
+					if (get_pair->second._player_id[i] <= -1) continue;
+					clients[get_pair->second._player_id[i]].send_p_stat_packet(key);
+				}
+			}
 			break;
 		}
 		}
