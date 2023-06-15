@@ -535,7 +535,7 @@ void process_packet(int c_id, char* packet)
 
 					clients[c_id].send_die_packet(pa, 100);
 
-					if (clients[c_id]._party_id != -1) {
+					if (clients[c_id]._party_id > -1) {
 						auto get_pair = party_map.find(clients[c_id]._party_id);
 						for (int i = 0; i < MAX_PARTY; ++i) {
 							if (get_pair->second._player_id[i] == -1) continue;
@@ -851,7 +851,7 @@ void do_npc_follow(int npc_id) {
 			printf("HIT PL > HP :%d\n", clients[npc._target_id]._hp);
 			clients[npc._target_id].send_move_packet(npc._target_id);
 
-			if (clients[npc._target_id]._party_id == -1) {
+			if (clients[npc._target_id]._party_id > -1) {
 				auto get_pair = party_map.find(clients[npc._target_id]._party_id);
 				for (int i = 0; i < MAX_PARTY; ++i) {
 					if (get_pair->second._player_id[i] <= -1) continue;
@@ -1058,10 +1058,10 @@ void worker_thread(HANDLE h_iocp)
 				clients[key]._hp = clients[key]._max_hp;
 			}
 			clients[key].send_move_packet(key);
-			if (clients[key]._party_id == -1) {
+			if (clients[key]._party_id > -1) {
 				auto get_pair = party_map.find(clients[key]._party_id);
 				for (int i = 0; i < MAX_PARTY; ++i) {
-					if (get_pair->second._player_id[i] <= -1) continue;
+					if (get_pair->second._player_id[i] == -1) continue;
 					clients[get_pair->second._player_id[i]].send_p_stat_packet(key);
 				}
 			}

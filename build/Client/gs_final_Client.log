@@ -1,0 +1,11 @@
+﻿  main.cpp
+E:\dev\GameServer_Final_term\gs_fianl_Server\protocol_2023.h(1,1): warning C4819: 현재 코드 페이지(949)에서 표시할 수 없는 문자가 파일에 들어 있습니다. 데이터가 손실되지 않게 하려면 해당 파일을 유니코드 형식으로 저장하십시오.
+E:\dev\GameServer_Final_term\gs_final_Client\main.cpp(87,12): warning C4244: '초기화 중': 'int'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\dev\GameServer_Final_term\gs_final_Client\main.cpp(88,12): warning C4244: '초기화 중': 'int'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\dev\GameServer_Final_term\gs_final_Client\main.cpp(194,12): warning C4244: '초기화 중': 'int'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\dev\GameServer_Final_term\gs_final_Client\main.cpp(195,12): warning C4244: '초기화 중': 'int'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\dev\GameServer_Final_term\gs_final_Client\main.cpp(603,106): warning C4244: '인수': 'int'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+E:\dev\GameServer_Final_term\gs_final_Client\main.cpp(621,52): warning C4244: '인수': 'int'에서 'float'(으)로 변환하면서 데이터가 손실될 수 있습니다.
+  gs_final_Client.vcxproj -> E:\dev\GameServer_Final_term\gs_final_Client\x64\Debug\gs_final_Client.exe
+  E:\dev\GameServer_Final_term\gs_final_Client\packages\SFML-cpp.redist.2.5.1.1\build\native\bin\x64\Debug\openal32.dll
+  1개 파일이 복사되었습니다.
