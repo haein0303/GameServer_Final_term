@@ -167,6 +167,7 @@ public:
 	int _p_num;
 	int _player_id[MAX_PARTY];
 	int _player_count;
+	mutex p_l;
 public:
 	PARTY() {
 		_player_count = 0;
@@ -184,22 +185,28 @@ public:
 	}
 	//조인 가능하면 1, 아니면 0
 	int join(int id) {
+		p_l.lock();
 		for (int i = 0; i < MAX_PARTY; ++i) {
 			if (_player_id[i] == -1) {
 				_player_id[i] = id;
+				p_l.unlock();
 				return 1;
 			}
 		}
+		p_l.unlock();
 		return 0;
 	}
 	//성공하면 1, 아니면 0
 	int exit(int id) {
+		p_l.lock();
 		for (int i = 0; i < MAX_PARTY; ++i) {
 			if (_player_id[i] == id) {
 				_player_id[i] = -1;
+				p_l.unlock();
 				return 1;
 			}
 		}
+		p_l.unlock();
 		return 0;
 	}
 };
